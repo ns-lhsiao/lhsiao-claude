@@ -21,6 +21,8 @@ mcp.json
 !skills/reground/**
 !skills/finish-up/
 !skills/finish-up/**
+!skills/quick-implement/
+!skills/quick-implement/**
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

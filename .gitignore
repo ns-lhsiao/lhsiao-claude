@@ -1,0 +1,40 @@
+# Deny-by-default: ignore everything, then allowlist tracked files.
+*
+
+# Tracked config files
+!.gitignore
+!CLAUDE.md
+!LEARNINGS.md
+!settings.json
+# mcp.json contains API tokens — do NOT track
+mcp.json
+
+# Scripts
+!scripts/
+!scripts/**
+
+# Skills (personal only — marketplace plugin skills are in plugins/)
+!skills/
+!skills/learn/
+!skills/learn/**
+
+# Explicitly ignore ephemeral/sensitive directories
+backups/
+cache/
+debug/
+downloads/
+file-history/
+history.jsonl
+ide/
+paste-cache/
+plans/
+plugins/
+projects/
+session-env/
+sessions/
+settings.local.json
+shell-snapshots/
+tasks/
+teams/
+usage-data/
+.DS_Store

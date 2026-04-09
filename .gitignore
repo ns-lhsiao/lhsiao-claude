@@ -17,6 +17,10 @@ mcp.json
 !skills/
 !skills/learn/
 !skills/learn/**
+!skills/reground/
+!skills/reground/**
+!skills/finish-up/
+!skills/finish-up/**
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

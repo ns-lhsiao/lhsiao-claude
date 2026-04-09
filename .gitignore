@@ -23,6 +23,12 @@ mcp.json
 !skills/finish-up/**
 !skills/quick-implement/
 !skills/quick-implement/**
+!skills/boot-troubleshoot/
+!skills/boot-troubleshoot/**
+!skills/boot-feature/
+!skills/boot-feature/**
+!skills/boot-bugfix/
+!skills/boot-bugfix/**
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

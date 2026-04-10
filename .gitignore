@@ -31,6 +31,9 @@ mcp.json
 !skills/boot-bugfix/**
 !skills/init-dev-env/
 !skills/init-dev-env/**
+!skills/mf-client-playwright/
+!skills/mf-client-playwright/SKILL.md
+# .env in mf-client-playwright contains credentials — stays ignored by default
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

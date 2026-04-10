@@ -18,13 +18,13 @@ Spin up the full local web-development stack so the user can test in a browser.
 
 Run each step sequentially — later steps depend on earlier ones being ready.
 
-### 1. Build webui (dev:webui alias)
+### 1. Build webui in watch mode
 
 ```bash
-cd /Users/lhsiao/ns/git/webui/src/webui/neo && export NODE_OPTIONS=--max_old_space_size=8192 && npm run build:dev-lazy -- --source-map=false
+cd /Users/lhsiao/ns/git/webui/src/webui/neo && export NODE_OPTIONS=--max_old_space_size=8192 && npm run dev:watch-lazy -- --source-map=false
 ```
 
-This is a long-running build. Run it and wait for completion before proceeding.
+Run this in the background — it stays running and rebuilds on file changes.
 
 ### 2. Start mf-client dev server
 

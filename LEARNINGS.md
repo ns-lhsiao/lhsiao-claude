@@ -11,10 +11,11 @@
 
 ## gh pr edit Requires read:project Scope
 
-- `gh pr edit <number> --body "..."` fails with "authentication token is
-  missing required scopes [read:project]". Use the REST API instead:
-  `gh api repos/OWNER/REPO/pulls/N -X PATCH -f body="..."`. The `-X PATCH`
-  is required — the default method won't work.
+- `gh pr edit <number> --body "..."` (and `--base`) fails with
+  "authentication token is missing required scopes [read:project]".
+  Use the REST API instead:
+  `gh api repos/OWNER/REPO/pulls/N -X PATCH -f body="..."` (or `-f base="branch"`).
+  The `-X PATCH` is required — the default method won't work.
 
 ## mcp.json Contains Secrets — Never Track in Git
 
@@ -30,4 +31,41 @@
   `curl -s -u "USER:TOKEN" "https://SITE/rest/api/3/issue/KEY?fields=summary,description,status"`
   where credentials are read from `mcp.json` via
   `jq -r '.mcpServers.atlassian.env.ATLASSIAN_API_TOKEN' ~/.claude/mcp.json`.
+- The env var names are: `ATLASSIAN_API_TOKEN`, `ATLASSIAN_USER_EMAIL`,
+  `ATLASSIAN_SITE_URL`. Do NOT guess `ATLASSIAN_EMAIL` or `ATLASSIAN_SITE`
+  — those produce silent empty responses.
+
+## mf-client Default Branch Is `master`
+
+- `git fetch origin main` fails — the default branch is `master`.
+  Always verify with `git remote show origin` before assuming.
+
+## mf-client Commitlint Requires Jira Task ID Format
+
+- Conventional Commits style (`fix: ...`) is rejected by the
+  `commitlint-plugin-jira-rules` hook. Required format:
+  `ENG-XXXXXX: description` (project key prefix, not `fix:`/`feat:`).
+  See `commitlint.config.js` for allowed prefixes: `ENG`, `NG`, `EP`.
+
+## mf-client Uses Jest via craco, Not Vitest
+
+- `npx vitest` pulls a standalone vitest that can't resolve `~/` path
+  aliases. The project test runner is `craco test` (Jest wrapper).
+  Run tests with: `npm test -- --testPathPattern='<pattern>'`.
+
+## Check Jira fixVersion for Correct Base Branch
+
+- When creating a worktree for a bug fix, check the Jira ticket's
+  `fixVersion` field to determine the correct base branch (e.g.,
+  `release/202605.2`). Do not default to `master`/`main` — basing on
+  the wrong branch pollutes the PR diff with unrelated commits and
+  requires a reset + cherry-pick to fix.
+
+## mf-client PR Description Template
+
+- PRs in mf-client follow a structured template with emoji-prefixed
+  sections: `## 🎯 Jira Issue`, `## 📝 Description`,
+  `## 🚧 Type of Change` (checkboxes), `## ✅ Checklist`,
+  `## 🖼️ Screenshots`, `## 📌 Additional Notes`.
+  See any recent PR (e.g., #1048) for the exact format.
 

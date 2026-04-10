@@ -29,6 +29,8 @@ mcp.json
 !skills/boot-feature/**
 !skills/boot-bugfix/
 !skills/boot-bugfix/**
+!skills/init-dev-env/
+!skills/init-dev-env/**
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

@@ -94,6 +94,16 @@
   readiness signal, not for the filter input directly.
 - "Save as..." button: `[data-testid="saved-filters-save-as"]`.
 
+## DevicesFilters.test.tsx Mocks Entire devices.helper Module
+
+- `DevicesFilters.test.tsx` uses `jest.mock('~/pages/devices-page/helper/devices.helper', () => ({...}))`
+  which replaces the **entire** module. Adding a new export from `devices.helper`
+  to `DevicesFilters.tsx` will fail at test time unless the mock is updated to
+  include it. Even then, partial mocks can produce `undefined` in assertions.
+  Safer approach: compose new logic into an already-mocked function (e.g.,
+  call `escapeSqsBackslashes` inside `normalizeQueryString`) so the component
+  doesn't need a new import.
+
 ## showErrorToast First Arg Must Not Be null
 
 - `showErrorToast` in `src/utils/helper/api.helper.ts` accesses

@@ -96,6 +96,23 @@ Before opening a PR, do a quick self-review:
 
 ---
 
+## PHASE 5b: Manual Validation (mf-client changes only)
+
+**Gate:** Only run this phase if the fix touches files under
+`netskope-ng-base/frontends/mf-client/`.
+
+1. Check if the dev environment is already running (look for processes on ports
+   `9797`, `8017`, or the webui watch build). If not running, invoke
+   `/init-dev-env` to start the full local stack.
+2. Once the dev environment is up, invoke `/mf-client-playwright` to launch a
+   headed browser, auto-login, and pause for manual testing.
+3. Ask the user to verify the fix in the browser and confirm it works before
+   proceeding to commit.
+
+If the user reports the fix doesn't work, return to **Phase 4** to iterate.
+
+---
+
 ## PHASE 6: Commit and PR
 
 ### Commit

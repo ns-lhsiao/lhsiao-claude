@@ -69,3 +69,35 @@
   `## 🖼️ Screenshots`, `## 📌 Additional Notes`.
   See any recent PR (e.g., #1048) for the exact format.
 
+## Playwright Not Available in mf-client node_modules
+
+- `npx playwright --version` works (temp download) but
+  `node -e "require('playwright')"` fails when run from the mf-client
+  directory. Install playwright in a throwaway directory:
+  `mkdir -p /tmp/pw-runner && cd /tmp/pw-runner && npm init -y && npm install playwright`
+  then run scripts from there.
+
+## Webui Hash Routing Uses /ns# Prefix
+
+- The webui SPA routes under `/ns#/...`, NOT `/#/...`. Navigating to
+  `/#/settings/device-management` returns 404. Correct pattern:
+  `http://localhost:9797/ns#/settings/device-management`.
+- After login at `/locallogin`, the app redirects to `/ns#/dashboard`.
+
+## Devices Page Playwright Selectors and Load Time
+
+- The Devices page loads in **Basic** filter mode. Click
+  `[data-testid="filter-toggle-advanced"]` to switch to Advanced mode,
+  then the query input is `[data-testid="filters-advanced-filter-input"]`.
+- The mf-client micro-frontend takes 30–60 s to load via module
+  federation. Wait for `[data-testid="filter-toggle-advanced"]` as the
+  readiness signal, not for the filter input directly.
+- "Save as..." button: `[data-testid="saved-filters-save-as"]`.
+
+## showErrorToast First Arg Must Not Be null
+
+- `showErrorToast` in `src/utils/helper/api.helper.ts` accesses
+  `error.message` without a null guard. Passing `null` as the first
+  argument throws `TypeError: Cannot read properties of null`.
+  Always pass `{}` (empty object) when there is no real error object.
+

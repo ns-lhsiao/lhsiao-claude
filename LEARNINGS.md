@@ -119,6 +119,14 @@
 - Jest hangs after all tests pass due to leaked async handles (valtio
   devtools, MSW). Add `--forceExit` to the test:coverage command for CI.
 
+## Always Lint Changed Files Before Committing in mf-client
+
+- Tests passing does not mean lint passes. Prettier formatting errors
+  (e.g., multi-line args that should be single-line) are only caught by
+  ESLint/Prettier, not by Jest. Always run
+  `npx eslint <changed-files>` before committing, especially when
+  `core.hooksPath=/dev/null` bypasses the pre-commit hook.
+
 ## SonarQube New-Code Coverage Measures Only Diff Lines
 
 - SonarQube quality gate checks coverage on lines changed in the PR, not

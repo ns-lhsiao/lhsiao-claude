@@ -111,3 +111,19 @@
   argument throws `TypeError: Cannot read properties of null`.
   Always pass `{}` (empty object) when there is no real error object.
 
+## mf-client test:coverage Needs 8 GB Heap and --forceExit
+
+- The default `--max-old-space-size=4096` is insufficient for ~2450 tests
+  with coverage instrumentation in `--runInBand` mode. The process gets
+  OOM-killed before tests complete. Use `--max-old-space-size=8192`.
+- Jest hangs after all tests pass due to leaked async handles (valtio
+  devtools, MSW). Add `--forceExit` to the test:coverage command for CI.
+
+## SonarQube New-Code Coverage Measures Only Diff Lines
+
+- SonarQube quality gate checks coverage on lines changed in the PR, not
+  whole-file coverage. To verify locally: run tests with
+  `--coverageReporters=json`, parse `coverage/coverage-final.json`, and
+  cross-reference statement/branch maps against `git diff` line numbers.
+  Overall file coverage percentages are misleading for the quality gate.
+

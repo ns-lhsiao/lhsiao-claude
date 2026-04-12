@@ -82,6 +82,27 @@ Once root cause is understood and the user agrees on the approach:
 
 ---
 
+## PHASE 4b: Coverage Verification
+
+Ensure new code has **>90% test coverage** (SonarQube quality gate).
+
+1. Identify changed files: `git diff <base-branch> --name-only -- '*.ts' '*.tsx'`
+   (exclude test files themselves).
+2. Run tests with JSON coverage for each changed source file:
+   ```bash
+   npm test -- --testPathPattern='<relevant-test>' \
+     --coverage --collectCoverageFrom='<changed-file>' \
+     --watchAll=false --coverageReporters=json
+   ```
+3. Parse `coverage/coverage-final.json` and cross-reference statement/branch
+   maps against the diff line numbers. Only lines that appear in the diff
+   count as "new code".
+4. If new-code coverage is below 90%, add tests targeting uncovered lines
+   and re-run. Repeat until the gate passes.
+5. Report new-code coverage to the user before proceeding.
+
+---
+
 ## PHASE 5: Self-Review
 
 Before opening a PR, do a quick self-review:

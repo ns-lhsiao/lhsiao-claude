@@ -1,5 +1,12 @@
 # Learnings
 
+## Webui Kubernetes Namespace Convention for MP-Prod POPs
+
+- The Rancher/kubectl namespace for webui pods follows the pattern
+  `<dc>-mp-prod--webui` (e.g., `dfw3-mp-prod--webui`), NOT `c4-<dc>`.
+  The `c4-am2` style used in older CMs is AM2-specific or outdated.
+  Always confirm with the engineer before writing namespace names into a CM.
+
 ## mf-client Is a Separate Git Repo Inside netskope-ng-base
 
 - `netskope-ng-base/frontends/mf-client` has its own `.git` with remote
@@ -134,4 +141,12 @@
   `--coverageReporters=json`, parse `coverage/coverage-final.json`, and
   cross-reference statement/branch maps against `git diff` line numbers.
   Overall file coverage percentages are misleading for the quality gate.
+
+## Investigate on the Deployed Branch, Not the Primary Checkout
+
+- When troubleshooting environment-specific bugs (e.g., qa01 vs prod),
+  always confirm which branch is deployed to that environment and analyze
+  code on THAT branch (`git show <branch>:<file>`). The primary checkout
+  may be on a different branch (e.g., a feature branch or `master`) that
+  lacks the relevant changes. In mf-client, `staging` is deployed to qa01.
 

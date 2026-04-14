@@ -30,8 +30,14 @@ Ask the user to confirm or refine:
 2. **What is the expected behavior?**
 3. **When did it start?** (deploy, config change, recent PR)
 4. **What has already been tried?**
+5. **GitHub context** — which branch, PR, or environment is affected? (e.g., `staging`,
+   `release/YYYYMM.N`, a specific PR number). If the bug is environment-specific (qa01
+   vs prod), the correct branch must be identified before code analysis begins — do NOT
+   default to the primary checkout or `master`.
 
 If the user provided enough detail in `$ARGUMENTS`, skip the questions and proceed.
+If the user specified a repo but not a branch, ask which branch or environment to
+investigate before starting Phase 2.
 
 ---
 

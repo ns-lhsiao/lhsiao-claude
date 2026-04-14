@@ -34,6 +34,8 @@ mcp.json
 !skills/mf-client-playwright/
 !skills/mf-client-playwright/SKILL.md
 # .env in mf-client-playwright contains credentials — stays ignored by default
+!skills/ngs-ticket-creator/
+!skills/ngs-ticket-creator/**
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

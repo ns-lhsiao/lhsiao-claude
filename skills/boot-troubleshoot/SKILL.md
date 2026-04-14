@@ -103,7 +103,28 @@ Ask the user:
 
 ---
 
-## PHASE 6: Capture Learnings
+## PHASE 6: Document to Confluence
+
+Ask the user: **"Would you like the findings documented to Confluence?"**
+
+If yes, use the `/confluence-updater` skill to create or update a page under the
+troubleshooting folder:
+`https://netskope.atlassian.net/wiki/spaces/~712020f420f5c3a46f4564a0597ec1ac2bfb78/folder/7508558363`
+
+The page should include:
+- Ticket summary and metadata (status, priority, assignee, tenant)
+- Problem description
+- Root cause analysis with evidence (DB queries, code references, log excerpts)
+- User-side mitigation / workaround (if any)
+- Recommended fix options
+- Key code references (file paths and line numbers)
+
+Use the Jira ticket key as the page title (e.g., `ENG-974628`). If a page with
+that title already exists under the folder, update it rather than creating a new one.
+
+---
+
+## PHASE 7: Capture Learnings
 
 Invoke the `/learn` skill to harvest any learnings from the investigation,
 regardless of the outcome chosen in Phase 5.

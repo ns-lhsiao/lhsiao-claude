@@ -142,6 +142,25 @@
   cross-reference statement/branch maps against `git diff` line numbers.
   Overall file coverage percentages are misleading for the quality gate.
 
+## Jira /rest/api/3/search Has Been Removed
+
+- The `POST /rest/api/3/search` endpoint has been deprecated and removed.
+  Use `POST /rest/api/3/search/jql` instead. Same request body format
+  (jql, maxResults, fields, etc.), just a different path.
+
+## CM Ticket Creation: security Field Not on Create Screen
+
+- When creating CM (Change Management) tickets via REST API, the `security`
+  field cannot be set — it's "not on the appropriate screen." Omit it from
+  the create payload; it gets set to the default automatically.
+
+## CM Ticket Type of Change Is a Cascading Select
+
+- The `customfield_16792` (Type of Change) field in CM tickets is a
+  cascading select. Must use `{"id": "PARENT_ID", "child": {"id": "CHILD_ID"}}`
+  format, not just `{"id": "CHILD_ID"}`. For Software > Feature Flag:
+  parent=13191, child=28422.
+
 ## Investigate on the Deployed Branch, Not the Primary Checkout
 
 - When troubleshooting environment-specific bugs (e.g., qa01 vs prod),

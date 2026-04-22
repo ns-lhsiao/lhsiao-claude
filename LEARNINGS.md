@@ -169,3 +169,34 @@
   may be on a different branch (e.g., a feature branch or `master`) that
   lacks the relevant changes. In mf-client, `staging` is deployed to qa01.
 
+## webui Branch Naming Convention
+
+- The webui repo enforces branch names via CI. The global CLAUDE.md
+  convention `<username>/<ticket>-<slug>` is rejected. Required format:
+  `pr/ENG-XXXXXX/kebab-slug`. See `https://nsgo.to/branchingstrategy`
+  for the full spec. Always defer to the webui CLAUDE.md `PR Workflow`
+  section which documents this.
+
+## webui Worktree Needs npm ci and phpunit Config
+
+- The worktree has no `node_modules/` or `vendor/`. For Angular tests:
+  `cd src/webui/neo && npm ci`, then `./node_modules/.bin/jest --testPathPattern=...`.
+  Do NOT use `npx jest` — it pulls jest 30 which rejects `--testPathPattern`
+  (renamed to `--testPathPatterns`). The project pins jest 29.
+- For PHP tests: symlinking `vendor/` from the primary checkout causes
+  `Cannot redeclare` errors (bootstrap loads helpers from both paths).
+  Instead, copy changed files to the primary checkout, run
+  `cd tests && php ../vendor/bin/phpunit --configuration phpunit.xml --filter='...'`,
+  then restore. The `--configuration phpunit.xml` is required for the
+  `APPPATH` constant bootstrap.
+
+## webui PHP Model: Use $this->callService() for Testability
+
+- `Client_configuration_model::getClientVersions()` originally called the
+  global `callService()` function, which is not mockable in PHPUnit.
+  `NS_Model::callService()` is a protected wrapper that delegates to the
+  global via `call_user_func_array`. Changing to `$this->callService()`
+  is functionally identical but allows `getMockForModel('...', ['callService'])`
+  to intercept the call. This pattern is already used elsewhere in the
+  codebase (e.g., `notifyProvisionerService` tests).
+

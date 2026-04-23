@@ -1,9 +1,10 @@
 ---
 name: mf-client-playwright
 description: >-
-  Launch a Playwright browser against the local dev proxy, auto-login with
-  default credentials, and leave the browser open for manual testing.
-  Assumes init-dev-env is already running.
+  Plan and execute automated Playwright validation against the local dev proxy.
+  Builds a test plan from the context, runs assertions in a headed browser,
+  screenshots each step, and reports pass/fail. Falls back to manual pause on
+  failure. Assumes init-dev-env is already running.
 user-invocable: true
 allowed-tools:
   - Bash
@@ -12,8 +13,8 @@ allowed-tools:
 
 # mf-client Playwright
 
-Open a Playwright browser pointed at the local development proxy and log in
-automatically so the user can begin manual testing immediately.
+Automated visual validation of mf-client changes in a real browser against the
+local development proxy.
 
 ## Prerequisites
 
@@ -24,8 +25,7 @@ The `init-dev-env` skill (or equivalent) must already be running:
 
 ## Credentials
 
-Credentials are stored in a `.env` file **next to this SKILL.md** — that file is
-NOT tracked in git. Read them at runtime:
+Stored in a `.env` file **next to this SKILL.md** (NOT tracked in git):
 
 ```
 /Users/lhsiao/.claude/skills/mf-client-playwright/.env
@@ -37,133 +37,169 @@ NS_TEST_USERNAME=<email>
 NS_TEST_PASSWORD=<password>
 ```
 
-Parse both values before launching the browser.
+---
 
 ## Steps
 
-### 1. Read credentials
+### 1. Plan Validation Steps
+
+Before writing any Playwright code, analyze the context (changed files, bug
+description, user instructions) and produce a **numbered validation plan** in
+prose. Present it to the user before executing. Example:
+
+```
+Playwright Validation Plan:
+
+1. Login and navigate to Settings > Device Management
+2. Wait for the Devices table to render with data
+3. Verify Device Classification column shows tags (selector: .ps-tag)
+4. Verify "View All" appears when tag text is truncated (selector: [data-testid="column-device-tags-view-all"])
+5. Click "View All" and verify the popover renders all tags
+6. Screenshot each step for evidence
+```
+
+Each step should include:
+- **What** to check (element, behavior, text content)
+- **Selector** or locator to use
+- **Pass condition** (element visible, text matches, count > N, class present, etc.)
+
+### 2. Read Credentials
 
 ```bash
 source /Users/lhsiao/.claude/skills/mf-client-playwright/.env
 ```
 
-Store `NS_TEST_USERNAME` and `NS_TEST_PASSWORD` for use in the Playwright script.
+### 3. Generate and Run Playwright Script
 
-### 2. Launch Playwright and log in
+Build a single inline `node -e` script that implements every step from the plan.
+The script must follow these patterns:
 
-Run an inline Node.js script from `/tmp/pw-runner` (install playwright there if
-needed — see Notes) that:
+#### Browser Launch (mandatory)
 
-1. Launches **real Chrome** (`channel: 'chrome'`) in **headed** mode
-   (`headless: false`) with `--no-sandbox`.
-   - **Do NOT use default Chromium** — the webui returns "Browser Not Supported".
-2. Creates a context with viewport `1920 x 1080`.
-3. Navigates to `http://localhost:9797/locallogin`.
-4. Waits for `#username` selector to appear.
-5. Fills `#username` with the username from `.env`.
-6. Fills `#password` with the password from `.env`.
-7. Clicks `#btn-sign-in`.
-8. **Waits for login to complete** using:
-   ```js
-   await page.waitForFunction(
-     () => !window.location.hash.includes('/login'),
-     { timeout: 30000 }
-   );
-   ```
-   Do NOT use a fixed `waitForTimeout` — login takes variable time.
-9. **Dismisses the welcome wizard** if present (fresh/unconfigured tenants):
-   ```js
-   const skipLink = page.locator('text=skip this step');
-   if (await skipLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-     await skipLink.click();
-     await page.waitForTimeout(3000);
-   }
-   ```
-10. **Navigates to the target page** via hash assignment (preserves session,
-    avoids full reload):
-    ```js
-    await page.evaluate(() => {
-      window.location.hash = '#/settings/device-management';
-    });
-    ```
-    Do NOT use `page.goto()` for hash-only navigation — it triggers a full
-    page reload which can lose session cookies and forces the mf-client
-    micro-frontend to re-bootstrap (30–60 s).
-11. **Pauses** the browser (`page.pause()`) so the user can interact manually.
+```js
+const browser = await chromium.launch({
+  headless: false,        // headed so user can watch
+  channel: 'chrome',      // MUST use real Chrome — default Chromium is rejected
+  args: ['--no-sandbox'],
+});
+const context = await browser.newContext({
+  viewport: { width: 1920, height: 1080 },
+});
+const page = await context.newPage();
+```
 
-If the user provides a target URL or hash route in the skill arguments, use that
-instead of the default `#/settings/device-management`.
+#### Login (mandatory)
 
-Example inline script (run via `node -e`):
+```js
+await page.goto('http://localhost:9797/locallogin');
+await page.waitForSelector('#username', { timeout: 15000 });
+await page.fill('#username', process.env.NS_TEST_USERNAME);
+await page.fill('#password', process.env.NS_TEST_PASSWORD);
+await page.click('#btn-sign-in');
 
-```bash
-NS_TEST_USERNAME="$NS_TEST_USERNAME" NS_TEST_PASSWORD="$NS_TEST_PASSWORD" \
-node -e "
-const { chromium } = require('playwright');
-(async () => {
-  const browser = await chromium.launch({
-    headless: false,
-    channel: 'chrome',
-    args: ['--no-sandbox'],
-  });
-  const context = await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-  });
-  const page = await context.newPage();
+// Wait for login to ACTUALLY complete — do NOT use fixed timeout
+await page.waitForFunction(
+  () => !window.location.hash.includes('/login'),
+  { timeout: 30000 }
+);
+```
 
-  // Login
-  await page.goto('http://localhost:9797/locallogin');
-  await page.waitForSelector('#username', { timeout: 15000 });
-  await page.fill('#username', process.env.NS_TEST_USERNAME);
-  await page.fill('#password', process.env.NS_TEST_PASSWORD);
-  await page.click('#btn-sign-in');
-  await page.waitForFunction(
-    () => !window.location.hash.includes('/login'),
-    { timeout: 30000 }
-  );
+#### Dismiss Welcome Wizard (mandatory)
 
-  // Dismiss welcome wizard if present
-  const skipLink = page.locator('text=skip this step');
-  if (await skipLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await skipLink.click();
-    await page.waitForTimeout(3000);
-  }
+```js
+const skipLink = page.locator('text=skip this step');
+if (await skipLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+  await skipLink.click();
+  await page.waitForTimeout(3000);
+}
+```
 
-  // Navigate via hash (no reload, preserves session)
-  await page.evaluate(() => {
-    window.location.hash = '#/settings/device-management';
-  });
+#### SPA Navigation (mandatory pattern)
 
-  console.log('Logged in — browser is open. Close it or press Ctrl+C to exit.');
+**Use hash assignment, NOT `page.goto()`** for navigating within the SPA.
+`page.goto()` triggers a full reload which loses session cookies and forces
+the micro-frontend to re-bootstrap (30–60 s).
+
+```js
+await page.evaluate(() => {
+  window.location.hash = '#/settings/device-management';
+});
+```
+
+#### Wait for Micro-Frontend (mandatory)
+
+The mf-client micro-frontend loads via module federation and takes 30–60 s.
+Wait for a known element as a readiness signal:
+
+```js
+await page.waitForSelector(
+  '[data-testid="filter-toggle-advanced"]',
+  { timeout: 60000 }
+);
+```
+
+#### Validation Steps (from the plan)
+
+For each planned step, follow this pattern:
+
+```js
+// Step N: <description from plan>
+console.log('Step N: <description>...');
+try {
+  // Perform action / assert condition
+  const count = await page.locator('.ps-tag').count();
+  const passed = count > 0;
+  console.log(passed ? 'PASS' : 'FAIL', '— Step N:', '<description>', `(found ${count})`);
+  results.push({ step: N, desc: '<description>', passed });
+} catch (e) {
+  console.log('FAIL — Step N:', '<description>', e.message);
+  results.push({ step: N, desc: '<description>', passed: false });
+}
+await page.screenshot({ path: '/tmp/pw-step-N.png' });
+```
+
+#### Summary and Fallback (mandatory)
+
+At the end, print a summary table and pause on failure:
+
+```js
+// Summary
+console.log('\n--- Validation Summary ---');
+results.forEach(r => {
+  console.log(r.passed ? 'PASS' : 'FAIL', `Step ${r.step}: ${r.desc}`);
+});
+const allPassed = results.every(r => r.passed);
+console.log(allPassed ? '\nAll steps passed!' : '\nSome steps failed.');
+
+if (!allPassed) {
+  console.log('Browser paused for manual inspection.');
   await page.pause();
-})();
-"
+} else {
+  await browser.close();
+}
 ```
 
-**Important:** Run this command in the background so the Claude session is not
-blocked. The browser stays open until the user closes it or presses Ctrl+C.
+### 4. Report Results
 
-### 3. Output summary
+After the script completes:
 
-```
-Playwright browser launched!
+1. Read the console output for PASS/FAIL results.
+2. Read the screenshot files (`/tmp/pw-step-N.png`) for any FAIL steps.
+3. Present a summary to the user:
+   - Which steps passed/failed
+   - Screenshots of failures
+   - Suggested next actions if failures occurred
 
-  URL       : http://localhost:9797/ns#/settings/device-management
-  Username  : <NS_TEST_USERNAME>
-  Viewport  : 1920 x 1080
+---
 
-The browser is open and logged in. Close the browser window or press Ctrl+C to stop.
-```
+## Runtime Notes
 
-## Notes
-
-- Playwright must be installed in a throwaway directory — it is NOT in
-  mf-client's node_modules:
+- **Install Playwright** in a throwaway directory (not in mf-client's node_modules):
   ```bash
   mkdir -p /tmp/pw-runner && cd /tmp/pw-runner && npm init -y && npm install playwright
   ```
-  Then run all scripts from `/tmp/pw-runner`.
-- If Playwright browsers are not installed, run `npx playwright install chromium`
-  before the script.
-- The `.env` file must NEVER be committed to git. It is excluded by the
-  deny-by-default `.gitignore` in `~/.claude/`.
+  Run all scripts from `/tmp/pw-runner`.
+- Run the script **in the background** so the Claude session is not blocked.
+- The `.env` file must NEVER be committed to git.
+- If the user provides a target hash route in the skill arguments, use that
+  instead of the default `#/settings/device-management`.

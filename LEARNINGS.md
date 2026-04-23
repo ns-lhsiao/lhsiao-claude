@@ -190,6 +190,43 @@
   then restore. The `--configuration phpunit.xml` is required for the
   `APPPATH` constant bootstrap.
 
+## Playwright: Headless Chromium Rejected by Webui
+
+- Default headless Chromium returns "Browser Not Supported" page title.
+  Must use `channel: 'chrome'` (real Chrome) in `chromium.launch()`.
+  Also set a real Chrome user-agent via `browser.newContext({ userAgent: '...' })`.
+
+## Playwright: Login Flow for Dev Proxy
+
+- After clicking `#btn-sign-in`, do NOT use a fixed `waitForTimeout`.
+  Login can take variable time. Use:
+  `await page.waitForFunction(() => !window.location.hash.includes('/login'), { timeout: 30000 })`
+- Fresh/unconfigured tenants show a **welcome wizard** after login that
+  blocks all SPA routes. Must dismiss via `text=skip this step` before
+  navigating to target pages.
+- Credentials are in `~/.claude/skills/mf-client-playwright/.env`
+  (`NS_TEST_USERNAME`, `NS_TEST_PASSWORD`). Source before launching.
+
+## Playwright: Use Hash Assignment for SPA Navigation
+
+- When the base path is the same (e.g., `/ns`), `page.goto()` triggers
+  a full page reload even for hash-only changes. This can lose session
+  cookies if the login hasn't fully propagated, and forces the SPA to
+  re-bootstrap (30–60 s for mf-client).
+- Instead, use `page.evaluate(() => { window.location.hash = '#/settings/device-management'; })`
+  to navigate within the SPA without reloading. This preserves session
+  state and is near-instant.
+
+## development-proxy Location and Config
+
+- The development proxy lives at `/Users/lhsiao/ns/git/development-proxy`,
+  NOT inside netskope-ng-base. Start with `npm run dev` (listens on :9797).
+- Tenant config: `src/config.ts` → `fallbackServer.host`. Uncomment/change
+  the host line and restart to switch tenants.
+- Custom route mocks can be added as `app.get()`/`app.post()` handlers
+  in `src/main.ts` **before** the main proxy middleware to intercept
+  specific API endpoints with mock data.
+
 ## webui PHP Model: Use $this->callService() for Testability
 
 - `Client_configuration_model::getClientVersions()` originally called the

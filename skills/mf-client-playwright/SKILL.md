@@ -51,17 +51,48 @@ Store `NS_TEST_USERNAME` and `NS_TEST_PASSWORD` for use in the Playwright script
 
 ### 2. Launch Playwright and log in
 
-Run an inline Node.js script via `npx playwright` that:
+Run an inline Node.js script from `/tmp/pw-runner` (install playwright there if
+needed — see Notes) that:
 
-1. Launches Chromium in **headed** mode (`headless: false`) with `--no-sandbox`.
-2. Sets viewport to `1920 x 1080`.
+1. Launches **real Chrome** (`channel: 'chrome'`) in **headed** mode
+   (`headless: false`) with `--no-sandbox`.
+   - **Do NOT use default Chromium** — the webui returns "Browser Not Supported".
+2. Creates a context with viewport `1920 x 1080`.
 3. Navigates to `http://localhost:9797/locallogin`.
-4. Waits for the login form to appear.
+4. Waits for `#username` selector to appear.
 5. Fills `#username` with the username from `.env`.
 6. Fills `#password` with the password from `.env`.
 7. Clicks `#btn-sign-in`.
-8. Waits for navigation to complete (URL should contain `#/dashboard` or similar).
-9. **Pauses** the browser (`page.pause()`) so the user can interact manually.
+8. **Waits for login to complete** using:
+   ```js
+   await page.waitForFunction(
+     () => !window.location.hash.includes('/login'),
+     { timeout: 30000 }
+   );
+   ```
+   Do NOT use a fixed `waitForTimeout` — login takes variable time.
+9. **Dismisses the welcome wizard** if present (fresh/unconfigured tenants):
+   ```js
+   const skipLink = page.locator('text=skip this step');
+   if (await skipLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+     await skipLink.click();
+     await page.waitForTimeout(3000);
+   }
+   ```
+10. **Navigates to the target page** via hash assignment (preserves session,
+    avoids full reload):
+    ```js
+    await page.evaluate(() => {
+      window.location.hash = '#/settings/device-management';
+    });
+    ```
+    Do NOT use `page.goto()` for hash-only navigation — it triggers a full
+    page reload which can lose session cookies and forces the mf-client
+    micro-frontend to re-bootstrap (30–60 s).
+11. **Pauses** the browser (`page.pause()`) so the user can interact manually.
+
+If the user provides a target URL or hash route in the skill arguments, use that
+instead of the default `#/settings/device-management`.
 
 Example inline script (run via `node -e`):
 
@@ -70,16 +101,38 @@ NS_TEST_USERNAME="$NS_TEST_USERNAME" NS_TEST_PASSWORD="$NS_TEST_PASSWORD" \
 node -e "
 const { chromium } = require('playwright');
 (async () => {
-  const browser = await chromium.launch({ headless: false, args: ['--no-sandbox'] });
-  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const browser = await chromium.launch({
+    headless: false,
+    channel: 'chrome',
+    args: ['--no-sandbox'],
+  });
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
   const page = await context.newPage();
 
+  // Login
   await page.goto('http://localhost:9797/locallogin');
-  await page.waitForSelector('#username');
+  await page.waitForSelector('#username', { timeout: 15000 });
   await page.fill('#username', process.env.NS_TEST_USERNAME);
   await page.fill('#password', process.env.NS_TEST_PASSWORD);
   await page.click('#btn-sign-in');
-  await page.waitForURL(/.*#\\/.*/, { timeout: 30000 });
+  await page.waitForFunction(
+    () => !window.location.hash.includes('/login'),
+    { timeout: 30000 }
+  );
+
+  // Dismiss welcome wizard if present
+  const skipLink = page.locator('text=skip this step');
+  if (await skipLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await skipLink.click();
+    await page.waitForTimeout(3000);
+  }
+
+  // Navigate via hash (no reload, preserves session)
+  await page.evaluate(() => {
+    window.location.hash = '#/settings/device-management';
+  });
 
   console.log('Logged in — browser is open. Close it or press Ctrl+C to exit.');
   await page.pause();
@@ -95,7 +148,7 @@ blocked. The browser stays open until the user closes it or presses Ctrl+C.
 ```
 Playwright browser launched!
 
-  URL       : http://localhost:9797/locallogin
+  URL       : http://localhost:9797/ns#/settings/device-management
   Username  : <NS_TEST_USERNAME>
   Viewport  : 1920 x 1080
 
@@ -104,6 +157,12 @@ The browser is open and logged in. Close the browser window or press Ctrl+C to s
 
 ## Notes
 
+- Playwright must be installed in a throwaway directory — it is NOT in
+  mf-client's node_modules:
+  ```bash
+  mkdir -p /tmp/pw-runner && cd /tmp/pw-runner && npm init -y && npm install playwright
+  ```
+  Then run all scripts from `/tmp/pw-runner`.
 - If Playwright browsers are not installed, run `npx playwright install chromium`
   before the script.
 - The `.env` file must NEVER be committed to git. It is excluded by the

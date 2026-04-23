@@ -227,6 +227,21 @@
   in `src/main.ts` **before** the main proxy middleware to intercept
   specific API endpoints with mock data.
 
+## mf-client Staging PR Pattern
+
+- When a fix PR targets `release/YYYYMM.N`, create a separate staging
+  counterpart PR for QA validation. Cherry-pick the commits onto a new
+  branch based on `origin/staging`, push, and open a PR targeting
+  `staging`. Use branch name `ns-lhsiao/ENG-XXXXXX-<slug>-staging`.
+
+## npm install in Worktrees Mutates package-lock.json
+
+- Running `npm install` (instead of `npm ci`) in a worktree on a
+  different base branch often produces large `package-lock.json` diffs
+  due to dependency resolution differences. Always run
+  `git checkout -- package-lock.json` before committing to avoid
+  polluting the PR with unrelated lockfile changes.
+
 ## webui PHP Model: Use $this->callService() for Testability
 
 - `Client_configuration_model::getClientVersions()` originally called the

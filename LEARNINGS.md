@@ -232,7 +232,7 @@
 - When a fix PR targets `release/YYYYMM.N`, create a separate staging
   counterpart PR for QA validation. Cherry-pick the commits onto a new
   branch based on `origin/staging`, push, and open a PR targeting
-  `staging`. Use branch name `ns-lhsiao/ENG-XXXXXX-<slug>-staging`.
+  `staging`. Use branch name `ns-lhsiao/ENG-XXXXXX/<slug>-staging`.
 
 ## npm install in Worktrees Mutates package-lock.json
 

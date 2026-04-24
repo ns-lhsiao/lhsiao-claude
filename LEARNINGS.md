@@ -1,5 +1,17 @@
 # Learnings
 
+## mf-client Worktrees Need .husky/_/husky.sh Copied from Primary
+
+- New git worktrees of mf-client fail `git commit` with
+  `.husky/pre-commit: line 2: .husky/_/husky.sh: No such file or directory`.
+  The `_/husky.sh` shim is created by husky's `prepare` script during
+  `npm install` in the primary checkout and is not tracked in git.
+  Before the first commit in a worktree, copy it over:
+  `mkdir -p .husky/_ && cp ../mf-client/.husky/_/husky.sh .husky/_/husky.sh`.
+  Do NOT bypass hooks with `-c core.hooksPath=/dev/null` — lint-staged
+  runs eslint/prettier fixes during commit, and skipping it can let
+  formatting errors slip into the PR.
+
 ## Webui Kubernetes Namespace Convention for MP-Prod POPs
 
 - The Rancher/kubectl namespace for webui pods follows the pattern

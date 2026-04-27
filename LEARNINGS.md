@@ -1,5 +1,11 @@
 # Learnings
 
+## mf-client Branch Naming: pr/ENG-XXXXXX/slug (Not ns-lhsiao/…)
+
+- mf-client uses the same `pr/ENG-XXXXXX/kebab-slug` branch convention
+  as webui — not the global CLAUDE.md default of `<user>/<ticket>/<slug>`.
+  Apply this whenever pushing to `netSkope/mf-client`, including worktrees.
+
 ## mf-client Push to origin (netSkope), Not lhsiao Fork
 
 - Always push feature branches to `origin` (`netSkope/mf-client`), NOT

@@ -59,6 +59,17 @@ Invoke `/start-task` with the Jira ticket key. This creates the branch and works
    fetch them for context.
 3. Summarize the deliverables and confirm understanding with the user.
 
+### Step 2.5: OpenSpec Proposal (Design Planning)
+
+Before writing any code, produce a spec-driven design proposal:
+
+1. Check whether the worktree root contains an `openspec/` directory.
+   - If **yes**, invoke `/opsx:propose "<short feature description derived from the Jira summary>"`.
+   - If **no**, ask the user: "This repo isn't initialized for OpenSpec. Run
+     `openspec init` now, or skip OpenSpec for this task?" Proceed based on the answer.
+2. Review the generated proposal/specs/design/tasks artifacts with the user before
+   implementation. Confirm scope and approach.
+
 ### Step 3: Explore and Implement
 
 1. Use `Glob` and `Grep` to understand relevant code structure.
@@ -89,9 +100,12 @@ Remind the user they can run `/finish-up <pr#>` once reviews and CI are green.
    SLUG=<derived from description>
    BRANCH="${GH_USER}/${SLUG}"
    ```
-2. Implement collaboratively (same as Step 3 in Phase 2B).
-3. Commit with Conventional Commits style (no Jira prefix).
-4. Open PR via `/github-pr-creator`.
+2. **OpenSpec proposal**: if the worktree has `openspec/`, invoke
+   `/opsx:propose "<description>"` before implementing. Otherwise ask whether
+   to run `openspec init` or skip.
+3. Implement collaboratively (same as Step 3 in Phase 2B).
+4. Commit with Conventional Commits style (no Jira prefix).
+5. Open PR via `/github-pr-creator`.
 
 ---
 

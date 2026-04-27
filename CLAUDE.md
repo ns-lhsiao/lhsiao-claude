@@ -107,6 +107,19 @@ Read @LEARNINGS.md
 - **Merge method**: squash merge only when merging via API.
 - Defer to project-level CLAUDE.md if it specifies different PR conventions.
 
+## Feature Planning with OpenSpec
+
+- When planning any new **feature**, invoke `/opsx:propose "<description>"` as the
+  first planning step if the repo has an `openspec/` directory at the root.
+- If the repo does NOT have `openspec/`, ask the user whether to run
+  `openspec init` first or proceed without OpenSpec for this task.
+- This applies to both `/boot-feature` and any ad-hoc feature design request.
+- **Does NOT apply to bugfixes** — bugs go through `/boot-bugfix` without
+  OpenSpec; its artifact model (proposal/specs/design/tasks) is overkill for
+  a targeted fix.
+- OpenSpec slash commands: `/opsx:propose`, `/opsx:apply`, `/opsx:archive`.
+  The CLI (`openspec`) is installed globally via npm; init it per-project.
+
 ## Sensitive Data
 
 - NEVER commit passwords, API keys, access key IDs, service account credentials, tokens,

@@ -1,5 +1,13 @@
 # Learnings
 
+## mf-client Push to origin (netSkope), Not lhsiao Fork
+
+- Always push feature branches to `origin` (`netSkope/mf-client`), NOT
+  the `lhsiao` fork remote. The team workflow opens PRs from branches
+  on the upstream repo (shared CI, reviewer access, CODEOWNERS apply).
+  `git push -u lhsiao …` creates cross-fork PRs that have to be
+  recreated. Default command: `git push -u origin <branch>`.
+
 ## mf-client Worktrees Need .husky/_/husky.sh Copied from Primary
 
 - New git worktrees of mf-client fail `git commit` with

@@ -301,3 +301,32 @@
   to intercept the call. This pattern is already used elsewhere in the
   codebase (e.g., `notifyProvisionerService` tests).
 
+## webui PR Description Template
+
+- PRs in webui follow a structured template at
+  `.github/pull_request_template.md`. Section headings are **H4 (`####`)**,
+  NOT H2 like mf-client. Exact section list (mirror verbatim):
+  `#### 🎯 Jira Issue`, `#### 📝 Change Description`,
+  `#### 🚧 Type of Change` (checkboxes), `#### ✅ Checklist`,
+  `#### 🧪 Manual Testing Done`, `#### 🖼️ Screenshots/Videos`,
+  `#### 📌 Additional Notes`.
+- Read the template in the worktree before opening a PR and copy the
+  headings/checklist items exactly — reviewers and tooling key off the
+  wording.
+
+## webui Commit Message Format: ENG-XXXXXX: Subject
+
+- webui commits use `ENG-XXXXXX: Subject` (project-key prefix with colon),
+  matching mf-client's commitlint requirement. NOT Conventional Commits
+  (`fix:`/`feat:`) from the global CLAUDE.md. Confirm via
+  `git log origin/develop` before writing a commit. Not documented in
+  webui's CLAUDE.md — inferred from history.
+
+## webui fixVersion Maps to develop Until Release Branch Is Cut
+
+- An in-flight fixVersion (e.g., 138.0.0 while still open) integrates to
+  `origin/develop`. A `Release<N>` branch only gets cut at code-freeze —
+  before that, searching `git branch -r | grep Release<N>` returns
+  nothing and basing a PR on `develop` is correct. Track the commit SHA
+  in case a cherry-pick to the release branch is needed later.
+

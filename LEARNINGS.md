@@ -100,7 +100,10 @@
   sections: `## 🎯 Jira Issue`, `## 📝 Description`,
   `## 🚧 Type of Change` (checkboxes), `## ✅ Checklist`,
   `## 🖼️ Screenshots`, `## 📌 Additional Notes`.
-  See any recent PR (e.g., #1048) for the exact format.
+- Read `.github/pull_request_template.md` in the worktree and mirror
+  the section headings and checkbox items **exactly** — do not invent
+  your own structure or skip optional sections. Reviewers and tooling
+  key off the template's wording.
 
 ## Playwright Not Available in mf-client node_modules
 
@@ -258,7 +261,8 @@
 - When a fix PR targets `release/YYYYMM.N`, create a separate staging
   counterpart PR for QA validation. Cherry-pick the commits onto a new
   branch based on `origin/staging`, push, and open a PR targeting
-  `staging`. Use branch name `ns-lhsiao/ENG-XXXXXX/<slug>-staging`.
+  `staging`. Use branch name `pr/ENG-XXXXXX/<slug>-staging` to match
+  the mf-client/webui branch-naming convention.
 
 ## npm install in Worktrees Mutates package-lock.json
 
@@ -267,6 +271,25 @@
   due to dependency resolution differences. Always run
   `git checkout -- package-lock.json` before committing to avoid
   polluting the PR with unrelated lockfile changes.
+
+## mf-client Worktree node_modules: Symlink, Don't npm install
+
+- Running `npm install` or `npm ci` in a fresh worktree mutates
+  `package-lock.json` and wastes several minutes. Symlink node_modules
+  from the primary checkout instead:
+  `ln -s ../mf-client/node_modules node_modules`. Tests, eslint,
+  prettier, and craco all resolve through the symlink. Zero lockfile
+  churn, zero install time.
+
+## Moving a Branch Across Remotes Requires Closing the PR
+
+- Once a PR is open with its head branch on one repo (e.g. the
+  `ns-lhsiao` fork), you cannot retarget it to a branch on a different
+  repo (e.g. `netSkope/mf-client`). Even pushing the same branch to
+  the new remote leaves the PR pinned to the original head. Workflow:
+  `gh pr close <num>` → `git push origin <branch>` →
+  `gh pr create --head <branch>` to reopen against the correct repo.
+  Also delete the branch from the old remote to avoid confusion.
 
 ## webui PHP Model: Use $this->callService() for Testability
 

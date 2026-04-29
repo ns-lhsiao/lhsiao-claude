@@ -1,5 +1,67 @@
 # Learnings
 
+## Check PR State Before Pushing Follow-up Commits
+
+- Pushing a commit to a PR branch does NOT automatically update the PR if
+  the PR has already been squash-merged. The commit lands on the topic
+  branch, stays orphaned, and the `main` branch is missing the fix.
+  Before pushing follow-up work, verify with
+  `gh pr view <num> --json state` — if `MERGED`, open a new PR with the
+  cherry-picked commit rebased onto current `main`, don't push to the old
+  topic branch.
+- Failure signature: scheduled workflow still exhibits the bug you "just
+  fixed" because the fix never reached `main`.
+
+## Slack section.text With Newlines Can Collapse Rendering
+
+- Joining multiple bullets into one `section.text` with `\n` separators
+  (e.g., "Count: 4\n• (main)\n• npe-dev-email") sometimes renders as
+  one line in Slack ("Count: 4• (main) • npe-dev-email"). This is
+  Slack-client-dependent and not a Block Kit guarantee.
+- Reliable fix: one `section` block per logical row. For a list of N
+  items, emit N section blocks (optionally interleaved with `divider`
+  blocks). This guarantees vertical separation and is also a prerequisite
+  for attaching per-row `accessory` buttons later.
+
+## Helm list Is Not Authoritative for ngweb-v2 Sidecar Inventory
+
+- `helm list -n ngweb-v2` misses sidecars deployed via YAP — not every
+  sidecar release is registered as a Helm release in-cluster. `kubectl
+  get deploy -n ngweb-v2` is the ground truth. Query Deployment names
+  and filter by the `<service>(-npe-<suffix>)?` convention:
+  `kubectl get deploy -n ngweb-v2 -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | awk -v svc="mf-client" '$0 == svc || index($0, svc "-npe-") == 1'`.
+- Corollary: the `app.kubernetes.io/instance` label works as a fallback
+  only if the sidecar was deployed via helm; it's unreliable for
+  YAP-deployed ones. Always prefer Deployment-name filtering.
+
+## Transferred GitHub Repo: origin URL Lies, Pushes Still Land Upstream
+
+- A fork that was later transferred into the upstream org still has the
+  old `ns-lhsiao/<repo>.git` URL in the local `origin` remote. `git push`
+  shows a "This repository moved. Please use the new location" notice,
+  but the push actually succeeds and lands on the upstream repo
+  (`netSkope/<repo>`). The PR head is already on upstream, not on a fork
+  — despite what `git remote -v` says.
+- Confirm which repo a PR's head branch lives on with
+  `gh pr view <num> --json headRepositoryOwner,headRepository`. If
+  `headRepositoryOwner.login = netSkope`, it's already a native
+  upstream-branch PR even if your local remote says otherwise.
+- To stop the misleading redirect notice:
+  `git remote set-url origin git@github.com:netSkope/<repo>.git`.
+
+## Multi-line jq Filter Needs Trailing Backslash After Closing Quote
+
+- When pipelining `kubectl ... | jq -r '...multi-line filter...' | sort)`,
+  put a trailing `\` on the line that closes the jq single quote, not just on
+  lines inside the quote. Bash tolerates raw newlines INSIDE `'…'` (they're
+  part of the filter string), but once the closing `'` appears, the outer
+  shell-parser is active again — and a bare `|` on the next line is a syntax
+  error. Failure signature: `syntax error near unexpected token |` at the line
+  below the closing `'`. Fix: `] | @tsv' \` then `| sort)`.
+- Before pushing multi-line shell steps in YAML, extract the `run:` block and
+  run `bash -n` on it. Logic dry-runs (e.g., running jq standalone) do not
+  catch this — the bug is in the bash line-continuation, not the jq itself.
+
 ## mf-client Branch Naming: pr/ENG-XXXXXX/slug (Not ns-lhsiao/…)
 
 - mf-client uses the same `pr/ENG-XXXXXX/kebab-slug` branch convention

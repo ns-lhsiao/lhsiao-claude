@@ -38,6 +38,8 @@ mcp.json
 !skills/ngs-ticket-creator/**
 !skills/cm-ticket-creator/
 !skills/cm-ticket-creator/**
+!skills/ui-client-hygiene-review/
+!skills/ui-client-hygiene-review/**
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

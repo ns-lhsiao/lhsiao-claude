@@ -9,6 +9,12 @@
   `gh pr view <num> --json state` — if `MERGED`, open a new PR with the
   cherry-picked commit rebased onto current `main`, don't push to the old
   topic branch.
+- Also happens when the user starts a squash-merge on GitHub *after* you've
+  made further edits locally — any commit pushed between "merge clicked"
+  and "squash completed" gets dropped from the squash. Rule of thumb:
+  whenever adding more commits to an open PR, always `gh pr view` first.
+  When in doubt, `gh api repos/OWNER/REPO/compare/main...<branch>` — if
+  it reports "behind by N, ahead by 0" the branch has already merged.
 - Failure signature: scheduled workflow still exhibits the bug you "just
   fixed" because the fix never reached `main`.
 

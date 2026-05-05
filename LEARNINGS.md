@@ -398,3 +398,109 @@
   nothing and basing a PR on `develop` is correct. Track the commit SHA
   in case a cherry-pick to the release branch is needed later.
 
+## NetSkope Flag Names: _enabled Suffix Is an Angular NsConstants Artifact
+
+- NetSkope flag keys appear with and without an `_enabled` suffix across
+  sources. The **raw PHP key** (e.g. `nplan4224_jit_provisioning` in
+  `Admin_userdata_model.php`) is what the featureflags endpoint
+  `/api/v2/ui/platform/featureflags/<name>` accepts. Angular's
+  `NsConstants` layer materializes the flag onto a global with an
+  `_enabled` suffix — so `NsConstants.nplan4224_jit_provisioning_enabled`
+  is the Angular-side view, NOT the real LD/PHP key.
+- webui2 consumes flags via `@ngweb/runtime` `useFlag(name)` which hits
+  the raw endpoint — use the unsuffixed name. mf-client's
+  `default-flag.constant.ts` registers the unsuffixed name too.
+- Confluence design docs sometimes write the suffixed Angular view; don't
+  copy them verbatim into webui2. Verify against `default-flag.constant.ts`
+  or the PHP model before writing a flag key.
+- Failure signature: `useFlag` returns false for a flag the tenant has on;
+  devtools shows a 404 on `/featureflags/<name>_enabled`.
+
+## v2 Live Probe Is a Partial Sample, Not a Schema
+
+- The v2 live-probe artifact in `migrations/pages/<page>/survey/` captures
+  only fields that were populated on the sampled configs. Fields absent
+  from every sampled row are NOT necessarily rejected by the API — they
+  may just not have been set. Dropping a field from the payload builder
+  "because the probe didn't show it" can introduce regressions.
+- Cross-reference the Confluence design doc's §4.x schema table and the
+  legacy Angular payload shape before concluding a field is out of scope.
+  For ambiguous cases, submit the field and observe the 422 body — v2
+  explicitly rejects unknown properties with `"unexpected property"`.
+- Failure signature: API 422 on create after "fixing" a payload, OR
+  populated fields silently disappear on edit round-trip.
+
+## Hand-Rolled Fetchers + Hand-Rolled MSW = Silent Contract Drift
+
+- When an upstream service has no OpenAPI spec and both the fetcher AND
+  the MSW handlers are hand-authored, contract bugs are invisible:
+  TypeScript sees only the hand-typed response, MSW serves the hand-built
+  shape, vitest passes, and the bug surfaces only against a live tenant.
+- Before landing a hand-rolled fetcher, verify request+response against
+  the legacy source (e.g. mf-client's `userManager.api.ts`) OR a live
+  devtools capture. Don't trust "compiles + tests pass" alone.
+- Fix is usually to mirror a proven legacy fetcher's exact shape (request
+  body envelope, response `data`/`result` wrapper, field names).
+
+## TanStack Table `columns` Memo Must Include Closed-Over Data in Deps
+
+- If a `columns` cell function closes over a prop/state (e.g. a lookup
+  map passed from the parent), and that prop is NOT in the `useMemo` dep
+  array, the column definition freezes with the initial captured value.
+  The cell keeps rendering the stale/empty value indefinitely even after
+  the parent re-renders with the populated prop.
+- Failure signature: an async-resolved lookup (`scimId → name`, user
+  profile map, etc.) appears to work on unit tests but never shows the
+  resolved value in the live app — cells render the raw id forever.
+- Fix: add every closed-over dependency (plain values, refs, resolved
+  query data) to the `columns` memo's dep array. This is easy to miss
+  because React Compiler and ESLint `react-hooks/exhaustive-deps` are
+  often disabled around `useReactTable` in codebases.
+
+## React Query `isFetching` Has a One-Render Gap When `enabled` Flips True
+
+- The render in which `enabled: true` first evaluates is NOT the same
+  render in which `isFetching: true` flips on. React Query observes the
+  enabled flip on the next render tick. During the gap, a gate like
+  `hasData > 0 && !query.data && query.isFetching` is false — so any
+  conditional rendering driven by it lets the stale/default value paint
+  for one frame.
+- Fix options: (1) Gate on `!query.data` alone if you always want to
+  hide until data lands (loses the "no rows = skip query" optimization
+  unless combined with a length check). (2) Track pending via a local
+  `useState` + `useEffect` that sets it true synchronously when the
+  source data becomes non-empty. (3) If using TanStack Table or similar,
+  the deeper fix is usually the memo-dep bug (see previous entry), not
+  the gate predicate.
+- Failure signature: a render-blocking gate "works in theory" but the
+  raw value still flashes visibly on first load.
+
+## pnpm Worktree Symlinks Need Different Targets for Tests vs. Commit Hooks
+
+- A pnpm workspace root's `node_modules` hosts tools like `lint-staged`,
+  while each app's `apps/<app>/node_modules` hosts tools like `vitest`.
+  When symlinking a worktree's node_modules to save install time:
+  - Root `node_modules` must link to a checkout that has pnpm-installed
+    deps (e.g. the primary checkout): `ln -s /path/to/primary/node_modules`.
+  - `apps/<app>/node_modules` needs the same — but a sibling worktree
+    that ran `pnpm install` may not have the app-scoped bins if the
+    resolver hoisted them. Symlinking to the primary is safest.
+- Failure signatures: `Command "lint-staged" not found` on commit (root
+  symlink broken/missing), or `vitest: command not found` on test (app
+  symlink broken). Swap both to the primary checkout's node_modules.
+- If the worktree was `pnpm install`ed at some point, there's a real
+  `node_modules` directory, not a symlink — remove it first with `rm -rf`
+  before re-linking.
+
+## Stuck Debugging: Delegate to a Subagent With Full Context
+
+- When two or three attempts at a bug fix miss the actual cause, stop
+  iterating on hypotheses in the main thread. Launch a subagent with:
+  the repro steps, every file the bug could touch, each hypothesis that
+  was tried and rejected, and a constraint on output length (≤400 words).
+- Subagents read files fresh without the main thread's framing bias and
+  often find closure / memoization / cache issues that look invisible
+  from "the current fix should have worked" perspective.
+- Failure signature: three consecutive fix commits that don't change the
+  user-visible behavior. Revert and delegate.
+

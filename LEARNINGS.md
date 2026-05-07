@@ -504,3 +504,42 @@
 - Failure signature: three consecutive fix commits that don't change the
   user-visible behavior. Revert and delegate.
 
+## Jira `assignee` On Create Gets Overridden By Component Default Assignee
+
+- `POST /rest/api/3/issue` with `"assignee": {"accountId": "..."}` in the
+  payload is NOT authoritative. If the specified component has a default
+  assignee configured, Jira silently overrides the payload and assigns the
+  ticket to the component default. Observed with the webui "Web UI"
+  component auto-routing new tickets to that component's owner regardless
+  of `accountId` in the create body.
+- Fix: after create, always follow with a dedicated reassign:
+  `PUT /rest/api/3/issue/<KEY>/assignee -d '{"accountId":"..."}'` (HTTP 204).
+- Failure signature: ticket creation returns 201 with your `accountId` in
+  the request body, but `GET /issue/<KEY>?fields=assignee` shows someone
+  else as the assignee.
+
+## Jira ENG "QA Test Recommendations" Lives On customfield_12503
+
+- The field visible in the Jira UI as "Fix QA Test Recommendations" is
+  `customfield_12503`. Accepts an ADF doc (not plain text). Set via
+  `PUT /rest/api/3/issue/<KEY>` with body
+  `{"fields":{"customfield_12503":{"type":"doc","version":1,"content":[...]}}}`.
+  Returns HTTP 204 on success.
+- To discover Jira custom-field IDs for an ENG ticket, hit
+  `GET /issue/<KEY>?expand=names` and filter `.names` for keywords. Field
+  labels in the UI differ subtly from the schema name ("Fix QA Test
+  Recommendations" vs. "QA Test Recommendations"); grep case-insensitively.
+
+## webui Tenant Migrations Don't Ship With PHPUnit Tests
+
+- Files under `src/webui/system_framework/application/migrations_ui/tenant/`
+  are not unit-tested in this repo. Verified by searching for companion
+  tests for migrations 396, 397, 405, 406 — none exist. The webui
+  CLAUDE.md post-change checklist implies tests for any PHP change, but
+  in this directory the convention is "no tests." Validation is
+  operational (staging dry-run + QA on a tenant via the QA Test
+  Recommendations on the ticket).
+- Rule of thumb: when a sibling migration on the same file's directory
+  has no test, don't invent one. Add the case matrix to the ticket's QA
+  Test Recommendations field instead.
+

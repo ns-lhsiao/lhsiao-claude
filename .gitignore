@@ -41,6 +41,10 @@ mcp.json
 !skills/ui-client-hygiene-review/
 !skills/ui-client-hygiene-review/**
 
+# Slash commands (global custom commands)
+!commands/
+!commands/**
+
 # Explicitly ignore ephemeral/sensitive directories
 backups/
 cache/

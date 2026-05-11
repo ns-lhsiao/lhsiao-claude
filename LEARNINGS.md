@@ -543,3 +543,34 @@
   has no test, don't invent one. Add the case matrix to the ticket's QA
   Test Recommendations field instead.
 
+## client-oppy-configuration bulkdelete Requires action/scope/idempotencyToken
+
+- `POST /api/v2/clientconfiguration/client/config/bulkdelete` rejects with
+  422 if `action`, `scope`, or `idempotencyToken` are missing. Required body:
+  `{ action: "delete", scope: "selective", ids: string[], idempotencyToken: string }`.
+- The MSW hand-rolled mock only modelled `{ ids }` — the real contract has
+  three additional required fields that are invisible until tested against a
+  live tenant. Lesson: for hand-rolled fetchers, verify the full request shape
+  against a live 422 body, not just the happy-path response.
+
+## Idempotency Token Belongs at the Call Site, Not Inside the API Function
+
+- Generating `crypto.randomUUID()` inside the raw HTTP function (e.g.
+  `bulkDeleteClientConfigs`) creates a new token on every call — including
+  retries — which defeats the purpose of idempotency.
+- Generate the token at the component level (e.g. in the mutation's
+  `mutationFn` or via a `useRef` in the component) so the same token is
+  reused for the lifetime of the user-initiated action. Pass it explicitly
+  as a parameter to the API function.
+
+## Passing ref.current as a Prop Is an Anti-Pattern
+
+- `ref.current` read during render is stale: refs don't trigger re-renders,
+  so the value passed as a prop reflects whatever `ref.current` was on the
+  *previous* render cycle, not the current one.
+- Fix: use a stable prop that derives from the component's own props/state.
+  For modal-open-time decisions (e.g. whether to show a confirm dialog),
+  prefer a stable `mode` prop that is set once per open cycle and doesn't
+  change mid-session. Do NOT use `ref.current` to communicate render-time
+  decisions to child components.
+

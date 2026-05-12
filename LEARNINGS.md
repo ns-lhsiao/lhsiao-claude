@@ -574,3 +574,33 @@
   change mid-session. Do NOT use `ref.current` to communicate render-time
   decisions to child components.
 
+## npm pack for Private Scoped Packages Needs --registry
+
+- `npm pack "@netskope-ui/match-logic@1.0.6"` fails silently (exit 1, no output)
+  when the package lives on a private artifactory and the default registry is npmjs.
+  Must pass `--registry https://artifactory-rd.netskope.io/artifactory/api/npm/npm-dev`.
+  Works fine after that.
+
+## npm→Yarn Lock Migration Silently Upgrades semver-Range Deps
+
+- When a project migrates from npm to yarn and generates a fresh `yarn.lock`,
+  all `^x.y.z` ranges re-resolve against the current registry. Packages can
+  jump by minor or even major versions with no explicit version bump PR.
+  In mf-client, `@netskope-ui/match-logic@^1.0.2` silently resolved to
+  `1.5.0` when `yarn.lock` was first generated (PR #1104, commit `1a565ead`).
+- To find when a dep was first locked to a specific version:
+  `git log --oneline -- yarn.lock` then `git show <sha> -- yarn.lock | grep -A3 "pkg-name"`.
+
+## @netskope-ui/match-logic allowMultiple:false Behavior Changed in 1.5.0
+
+- In **1.0.6**, `allowMultiple: false` only disabled individual criterion dropdown
+  items; the plain "+" button was gated solely by `maxCount`. So
+  `allowMultiple: false, maxCount: 16` correctly allowed up to 16 entries.
+- In **1.5.0**, `allowMultiple: false` immediately disables the plain "+" button
+  after the first entry, regardless of `maxCount`. The
+  `allowMultiple: false, maxCount: 16` pattern is now broken — button grays out
+  after 1 item.
+- Fix: change `allowMultiple: false` → `allowMultiple: true` wherever `maxCount`
+  is also set. Affected in mf-client: `AVCriteria.tsx`, `ProcessCriteria.tsx`,
+  `FileCriteria.tsx`, `RegistryCriteria.tsx`, `OsCriteria.tsx`, `DeviceTagCriteria.tsx`.
+

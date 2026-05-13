@@ -48,6 +48,8 @@ mcp.json
 !skills/restack-pr/**
 !skills/helm-recover/
 !skills/helm-recover/**
+!skills/form-field-inventory/
+!skills/form-field-inventory/**
 
 # Slash commands (global custom commands)
 !commands/

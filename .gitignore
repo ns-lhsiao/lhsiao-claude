@@ -40,6 +40,14 @@ mcp.json
 !skills/cm-ticket-creator/**
 !skills/ui-client-hygiene-review/
 !skills/ui-client-hygiene-review/**
+!skills/where-am-i/
+!skills/where-am-i/**
+!skills/contract-probe/
+!skills/contract-probe/**
+!skills/restack-pr/
+!skills/restack-pr/**
+!skills/helm-recover/
+!skills/helm-recover/**
 
 # Slash commands (global custom commands)
 !commands/

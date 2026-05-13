@@ -604,3 +604,64 @@
   is also set. Affected in mf-client: `AVCriteria.tsx`, `ProcessCriteria.tsx`,
   `FileCriteria.tsx`, `RegistryCriteria.tsx`, `OsCriteria.tsx`, `DeviceTagCriteria.tsx`.
 
+## Tenant Swagger/OpenAPI Endpoints Are Not Exposed at the Edge
+
+- Even when an API is fully spec'd in `netSkope/api-gateway-endpoints`, the
+  spec is NOT published at the tenant edge. All standard discovery paths
+  return 404: `/apidocs/swagger.json`, `/apidocs/openapi.json`,
+  `/apidocs/v3/api-docs`, `/apidocs/`, `/api/v2/swagger.json`, `/openapi.json`,
+  `/v2/api-docs`, `/api-docs`, `/api/v2/<service>/{apidocs,openapi.json,
+  swagger.json,docs,spec}`, `/.well-known/openapi.json`. Kong returns "no
+  Route matched" or the tenant 404 page.
+- Workaround: read the YAML spec directly from the api-gateway-endpoints PR
+  via `gh pr diff <num> --repo netSkope/api-gateway-endpoints` (returns the
+  full OpenAPI 3.1.0 file). This is the authoritative source.
+- Failure signature: any auth header works, the path simply doesn't resolve.
+
+## v2 /api/v2/users/getgroups SAML Field Semantics Are Inverted
+
+- For `collectionId: 'default'` (regular user groups): row.id is the wire
+  identifier (used as `targets.values[].id`), row.displayName is the label.
+- For `collectionId: 'jit_default'` (SAML groups): row.scimId is the wire
+  identifier, row.id is the **display name**. Sending the display name as
+  the target id triggers "OU/Group already exists" — looks like a duplicate
+  error but is actually a wire-format error.
+- Fix: in the `jit_default` mapper, use `{ id: row.scimId, name: row.id }`.
+  Confirmed by mf-client `userManager.helper.ts` /
+  `getSAMLGroupsByScimIds`.
+- Also: the scimId batch lookup (`scimId.in: [...]`) MUST include
+  `collectionId: 'jit_default'` in the filter — without it the server
+  returns no results and SAML rows render as raw UUIDs in the list table.
+
+## bulkdelete / bulkstatus Wire Shape Has Non-Obvious Field Names
+
+- The v2 `client-oppy-configuration` bulk endpoints diverge from intuition:
+  - **bulkdelete request**: `{ action: "delete", scope: "selective", ids,
+    idempotencyToken }`. `action` enum is just `["delete"]`; `scope` enum
+    is just `["selective"]`. Missing any of these → 422.
+  - **bulkdelete response 202**: `{ jobId, pollUrl, status, action,
+    message }` — only `jobId` is load-bearing for the client.
+  - **bulkstatus response**: `{ jobId, status, action, totalAffected
+    (int64), message, createdAt, completedAt }`. NO `processed`, NO
+    `total`, NO `errors[]`. Reading those returns `undefined` silently.
+  - **Status enum is 5 values**: `accepted | in_progress | completed |
+    failed | cancelled`. A poll loop that only terminates on
+    `completed|failed` will spin until timeout on a `cancelled` job.
+- Hard cap: 250 ids per bulkdelete request; chunk if exceeding. Rate
+  limit: 4 req/sec (vs 50/sec for per-item CRUD).
+
+## Angular processMonthlyVersions Subtracts Goldens From Specifics
+
+- Legacy v1 `/getClientVersions` returns three flat string arrays:
+  `goldenversions`, `specificversions`, `monthlyversions?`.
+  `specificversions` is a SUPERSET that includes goldens. Angular's
+  `processMonthlyVersions` produces the monthly-release dropdown via
+  `specificversions.filter(v => !goldenSet.has(v))`.
+- v2 `/client/versions` flips the schema: each `release` carries
+  `golden: bool` and `specific: bool` independently. A "monthly" hotfix
+  has `specific: true, golden: false`. The v2-equivalent filter is
+  `release.specific && !release.golden` — NOT `release.specific` alone.
+- Failure signature: a "Specific Monthly Release" dropdown that lists
+  golden majors (e.g., `132.0.0`) as if they were monthly hotfixes.
+  Aliasing `monthlyVersions = specificVersions` is the buggy shortcut.
+

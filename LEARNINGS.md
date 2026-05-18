@@ -665,3 +665,84 @@
   golden majors (e.g., `132.0.0`) as if they were monthly hotfixes.
   Aliasing `monthlyVersions = specificVersions` is the buggy shortcut.
 
+## Verify Wire Unit Before Refactoring On Field Name Alone
+
+- A field named `maxTimeoutSeconds` returned by the BE may actually
+  carry **minutes**. Names lie; the live payload is the only authority.
+  Before refactoring "the form is misnamed, multiply by 60 everywhere,"
+  open devtools or `curl` a real config and confirm what the integer
+  represents. v1's matching field stores minutes — that's a strong hint
+  the BE inherited the same convention regardless of the v2 type name.
+- Failure signature: a saved value of `30` displays as "30 seconds" in
+  v2 but "30 minutes" in v1. Round-tripping a v1 record divides the real
+  duration by 60 in v2 (or multiplies on save).
+- Remediation pattern: do the probe FIRST. Only refactor units after a
+  live datapoint disagrees with the type name. A single screenshot from
+  the user showing `popPinning.maxTimeoutSeconds: 240` with "4 hours" in
+  v1 settled the ambiguity faster than an entire sub-agent audit.
+
+## Form Unit Dropdowns Need a Conversion Boundary
+
+- An input bound to `clientOneTimeDurationMinutes` plus a sibling unit
+  dropdown (`min` / `hr`) does NOT auto-convert. Typing `6` with `hr`
+  selected stores `6` (minutes) unless the input's `onChange` multiplies
+  by 60 when the unit is `hr` and the displayed `value` divides by 60.
+  Otherwise the dropdown is purely cosmetic and the wire payload is
+  wrong.
+- Pattern: keep storage normalized to one unit (minutes), and translate
+  at the input boundary based on the watched unit field. Update both
+  `value={display}` and `onChange={n => durationUnit === 'hr' ? n*60 : n}`.
+  Adjust `min`/`max` in tandem (24h cap = `1` and `24` in hr mode,
+  `5` and `1440` in min mode).
+- Failure signature: dropdown switches `min`→`hr` but the input value
+  doesn't visually change, and the saved payload reflects the typed
+  number as raw minutes regardless.
+
+## vi.mock for `new ClassName(...)` Needs a Class, Not vi.fn()
+
+- Mocking a constructor with
+  `vi.mock('lib', () => ({ Foo: vi.fn().mockImplementation((x) => ({...})) }))`
+  emits a vitest warning ("the mock did not use 'function' or 'class' in
+  its implementation") and the resulting mock is NOT constructable —
+  `new Foo()` either silently returns a plain object missing instance
+  methods, or throws, depending on the runtime.
+- Fix: declare an actual class. `vi.mock('lib', () => ({ Foo: class { constructor(x) { ... this.field = ... } } }))`.
+  Works with both static `import` and dynamic `await import`.
+- Also: `vi.mock` factories are HOISTED above all top-level `const`s
+  (including in the same file). The factory body cannot reference outer
+  consts like `BAD_PEM`. Match on stable substrings (`pem.includes('malformed')`)
+  instead of `pem === BAD_PEM`.
+
+## pnpm Adds in a Worktree Need to Install in the Primary Checkout
+
+- `pnpm --filter <pkg> add <dep>` inside a git worktree fails with
+  `ERR_PNPM_UNEXPECTED_VIRTUAL_STORE` because the worktree's node_modules
+  is a symlink to the primary checkout's node_modules / .pnpm store.
+  pnpm refuses to relink the virtual store to a different location.
+- Workflow: `cd <primary checkout> && pnpm --filter <pkg> add <dep>`.
+  Edit `package.json` in the worktree first if you want the version
+  declaration committed alongside the feature; then run pnpm in the
+  primary so the .pnpm store is updated.
+- Failure signature: `pnpm add` inside the worktree exits non-zero with
+  the virtual-store error and prints "If you want to use the new virtual
+  store location, reinstall your dependencies with pnpm install" — do
+  NOT take that suggestion (would mutate package-lock.json in the
+  worktree).
+
+## Design Before Fixing — Consult a Sub-agent for Non-trivial Reverse-Engineering
+
+- For UI parity bugs that involve cross-layer guesses (UI ↔ schema ↔
+  payload-builder ↔ wire), a 5-minute sub-agent audit (general-purpose
+  or domain-specific) of v1 source pays for itself. Two real cases this
+  session: (1) the POP-pinning unit ambiguity that required a two-step
+  revert because I refactored on a name alone; (2) the OTD unit-dropdown
+  fix that needed a follow-up because the unit-conversion boundary
+  wasn't designed up front.
+- Heuristic: if the fix touches more than two files OR crosses a
+  serialization boundary OR depends on a flag/feature whose v1 wiring
+  isn't already in front of you, spawn a sub-agent to surface v1 truth
+  before writing v2 code. Cite v1 file:line in the resulting commit.
+- Failure signature: shipping a fix, then immediately needing a
+  follow-up commit because round-trip parity broke or a related field
+  was missed. Each round-trip the user has to flag burns trust.
+

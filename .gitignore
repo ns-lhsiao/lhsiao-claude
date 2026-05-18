@@ -50,6 +50,8 @@ mcp.json
 !skills/helm-recover/**
 !skills/form-field-inventory/
 !skills/form-field-inventory/**
+!skills/component-split/
+!skills/component-split/**
 
 # Slash commands (global custom commands)
 !commands/

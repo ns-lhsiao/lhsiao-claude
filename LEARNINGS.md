@@ -769,6 +769,28 @@
   reserve 401 for actual auth failures). The skill's existing fixes
   (Mode A/B) are insufficient by themselves on qa01 today.
 
+## aria-disabled Buttons Don't Receive CSS `:disabled` Styling
+
+- ntskui's Checkbox / Select / Combobox triggers (and other base-ui /
+  Radix primitives) render as `button[role="checkbox"]` etc. with
+  `aria-disabled="true"` instead of the HTML `disabled` attribute. CSS
+  `:disabled` and Tailwind's `disabled:` variants ONLY match a real
+  `disabled` attribute — `aria-disabled` does NOT trigger them. Same
+  for `data-disabled` (which only some libs add).
+- Symptom: a `disabled={true}` prop correctly suppresses clicks (the
+  component's `onCheckedChange` / `onClick` checks the prop in JS), but
+  the rendered control looks identical to the enabled one. Confused
+  end-user — "is this clickable?"
+- Fix: apply the grayout (`opacity-50 cursor-not-allowed`) to the
+  WRAPPING container in your own component, not relying on the
+  primitive's built-in `disabled:` classes. For a row that contains a
+  Checkbox + Label, that means putting the opacity class on the
+  surrounding `<div>` when the prop is true.
+- Test trap: assertions like `toBeDisabled()` may not fire for
+  `role="checkbox"` button-style primitives. When testing ntskui
+  Checkbox / Select disabled state, assert directly:
+  `el.getAttribute('aria-disabled') === 'true'`.
+
 ## auth_request Failures Masquerade As 404 Via Chained error_page
 
 - An unauthenticated curl to `/mf/<app>/remoteEntry.js` on the catch-all

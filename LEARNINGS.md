@@ -746,3 +746,41 @@
   follow-up commit because round-trip parity broke or a related field
   was missed. Each round-trip the user has to flag burns trust.
 
+## ngweb_mf Upstream Returns 401 (Not 404) For Missing x-npe-env Builds
+
+- The `@mf_npe_fallback` wiring in `webui_proxy*.nginx.conf` only fires
+  on a 404 from the upstream (`error_page 404 = @mf_npe_fallback`).
+  When the env-prefixed build is missing, the `ngweb_mf_lbaas` upstream
+  returns **401 Unauthorized**, NOT 404. The 401 is never caught by the
+  fallback, so the env-specific path is served as a final 401 (for
+  `build-info.json` which has `auth_request off`) or rewritten to the
+  static 174 KB `/error_pages/404.html` (for `remoteEntry.js`, by
+  `error_page 401 =404 /error_pages/404.html`).
+- `/npe-ngssl-check` Mode A/B audit only checks for the static wiring
+  presence — a config can pass the audit and still fail at runtime
+  because of the upstream status-code mismatch. Always pair the static
+  audit with a live curl probe of `/mf/<app>/build-info.json` (auth-off
+  path) on a wildcard tenant, comparing no-header vs.
+  `x-npe-env: npe-anything`. If the env-prefixed call returns 401 the
+  fallback is dead regardless of how the wiring looks.
+- Fix candidates: (1) widen `error_page 401 404 = @mf_npe_fallback`
+  and gate the fallback by `$http_x_npe_env`; (2) fix the upstream to
+  return 404 for "env build not found" (architecturally correct —
+  reserve 401 for actual auth failures). The skill's existing fixes
+  (Mode A/B) are insufficient by themselves on qa01 today.
+
+## auth_request Failures Masquerade As 404 Via Chained error_page
+
+- An unauthenticated curl to `/mf/<app>/remoteEntry.js` on the catch-all
+  webui_proxy returns HTTP 404 with a 174 KB HTML body. This looks like
+  a missing-resource 404 but is actually `auth_request /auth` returning
+  401, then `error_page 401 =404 /error_pages/404.html` rewriting the
+  status. Don't conclude "fallback wiring is broken" from this signal
+  alone.
+- To isolate auth from upstream behavior, probe `/mf/<app>/build-info.json`
+  instead — that location has `auth_request off`, so its status is the
+  upstream's true response. This was the test that revealed the 401-vs-404
+  upstream behavior in the previous entry.
+- Failure signature: a 404 with a multi-hundred-KB HTML payload (real
+  upstream 404s are short JSON or tiny HTML). Size mismatch is the tell.
+

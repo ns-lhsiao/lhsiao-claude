@@ -92,6 +92,11 @@ Topical reference. Each bullet is a self-contained lesson: what failed, why, and
 
 - **`vi.mock` for `new ClassName(...)` needs an actual class**, not `vi.fn().mockImplementation()`. The mock isn't constructable and emits a warning. Use `vi.mock('lib', () => ({ Foo: class { constructor(x) { this.field = ... } } }))`.
 - **`vi.mock` factories are HOISTED above all top-level consts**. The factory body can't reference outer consts (e.g. `BAD_PEM`). Match on stable substrings like `pem.includes('malformed')` instead.
+- **Radix / `@ntskui/react` Select can't be driven by `fireEvent.click` in jsdom**. Pointer events + portaled `SelectContent` make `onValueChange` unreachable, so SonarQube branch coverage on `displayValue` / `onValueChange` arrows stays partial. Workaround: `vi.mock('@ntskui/react', ...)` and replace `Select`/`SelectContent`/`SelectItem`/`SelectTrigger`/`SelectValue` with a native `<select>`/`<option>` shim that calls the real `onValueChange` from a synthetic `change` event. Reference impl: `apps/shell/src/features/incidents/dlp/__tests__/StatusControl.test.tsx`. Pair with a sibling probe component reading `useFormContext().watch('field')` to assert form state mutations rather than spying on `onChange`.
+
+## webui2 Monorepo
+
+- **`pnpm --filter @ns/shell` fails** with "No projects matched the filters". The shell app's package name is plain `shell`, not `@ns/shell`. Use `pnpm --filter shell test|lint|typecheck` or `cd apps/shell && npx vitest run <pattern>` directly. Same applies to other apps under `apps/<name>` — package names are unscoped.
 
 ## npm / Yarn Packaging
 

@@ -52,6 +52,8 @@ mcp.json
 !skills/form-field-inventory/**
 !skills/component-split/
 !skills/component-split/**
+!skills/review-new-code-coverage/
+!skills/review-new-code-coverage/**
 
 # Slash commands (global custom commands)
 !commands/

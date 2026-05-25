@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 CTX_LIMIT = int(os.environ.get("CLAUDE_CTX_LIMIT", 1_000_000))
-THRESHOLD = float(os.environ.get("CLAUDE_COMPACT_THRESHOLD", 0.40))
+THRESHOLD = float(os.environ.get("CLAUDE_COMPACT_THRESHOLD", 0.20))
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 

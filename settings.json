@@ -20,5 +20,21 @@
       }
     }
   },
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/compact-nudge.py"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/daily-cost-alert.py"
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -57,6 +57,10 @@ mcp.json
 !commands/
 !commands/**
 
+# Hooks
+!hooks/
+!hooks/**
+
 # Explicitly ignore ephemeral/sensitive directories
 backups/
 cache/

@@ -54,6 +54,59 @@ Run these in parallel where independent:
 - Check `git log` for recent commits touching the relevant files.
 - Check for recent PRs that may have introduced the issue.
 
+### 2b.1: Origin commit & affected-version trace
+
+Always determine **when each defective code path was first introduced**, not just
+when it was last touched. The Jira `affectsVersion` is what QA observed — it
+is **not** authoritative for root cause. Verify this independently before
+calling anything a regression.
+
+For each defective surface (file + symbol/markup), run:
+
+1. **Pickaxe by code symbol or marker** — finds the commit that added it,
+   regardless of file moves:
+   ```bash
+   git log --reverse --oneline -S '<distinctive-string>' -- <path>
+   ```
+   Use a token unique to the defective markup (e.g. `errorSettingsTemplate`,
+   `id="error-settings"`, `showManageErrorSettingsModal`). The first row is the
+   introducing commit.
+
+2. **Confirm with `git blame` and `git log --follow --reverse`** for the file —
+   the introducing commit is usually the first entry. Disambiguate when a
+   later commit *re-added* the code (e.g. a framework revert that restored
+   the prior shape but did not author it).
+
+3. **Map commit → first shipping release** by walking sorted release branches:
+   ```bash
+   for r in $(git branch -r | grep -E 'origin/Release[0-9]+$' | sort -V); do
+     if git merge-base --is-ancestor <sha> "$r" 2>/dev/null; then
+       echo "FIRST CONTAINING: $r"; break
+     fi
+   done
+   ```
+   Substitute the project's release-branch naming (`Release<N>`,
+   `release/YYYYMM.N`, `cfw-release/N.0`, etc.) — derive from `git branch -r`.
+
+4. **Build an introduction timeline** — one row per defective surface, columns
+   `surface | introducing commit (sha + ticket + author + date) | first
+   shipping release`. If multiple defects accreted across multiple commits
+   (common: original feature + later partial-fix-that-papered-over), record
+   each wave separately. The reported affectsVersion should reflect the
+   **earliest** introducing release among them, not the latest.
+
+5. **Validate against current release branches** — confirm the defect is
+   byte-identical across the relevant `Release<N-1>`, `Release<N>`, and
+   `develop` (or equivalents). If identical, it's not a regression in `N`;
+   the earlier introducing release is the correct affectsVersion.
+
+Phase 4 must report:
+- The earliest **correlated affected version** (with introducing sha + ticket).
+- Whether the bug is a **regression** in the QA-reported version, or
+  pre-existing debt re-surfaced by recent testing. State this explicitly.
+- If the QA-reported `affectsVersion` differs from the traced one, surface the
+  delta so the user can decide whether to update the ticket.
+
 ### 2c: Configuration & Environment
 - Check relevant config files, environment variables, feature flags, or
   control flags that may affect the behavior.
@@ -85,8 +138,13 @@ Present results to the user:
 
 1. **Root cause** — what is actually happening and why (with file paths and line numbers)
 2. **Evidence** — the specific code, logs, or config that confirms the root cause
-3. **Suggested fix** — concrete next steps, referencing specific files and lines
-4. **Confidence** — how confident you are, and what gaps remain
+3. **Origin & affected version** — introducing commit(s) (sha, ticket, author,
+   date) and the **first release branch** that shipped each defective surface.
+   State explicitly whether this is a regression in the QA-reported version
+   or pre-existing debt. If the traced affectsVersion differs from the Jira
+   ticket's, surface the delta.
+4. **Suggested fix** — concrete next steps, referencing specific files and lines
+5. **Confidence** — how confident you are, and what gaps remain
 
 If the root cause is unclear, be honest about it. State what was ruled out and
 what avenues remain unexplored.

@@ -107,18 +107,27 @@ Read @LEARNINGS.md
 - **Merge method**: squash merge only when merging via API.
 - Defer to project-level CLAUDE.md if it specifies different PR conventions.
 
-## Feature Planning with OpenSpec
+## Planning with OpenSpec
 
-- When planning any new **feature**, invoke `/opsx:propose "<description>"` as the
-  first planning step if the repo has an `openspec/` directory at the root.
-- If the repo does NOT have `openspec/`, ask the user whether to run
-  `openspec init` first or proceed without OpenSpec for this task.
-- This applies to both `/boot-feature` and any ad-hoc feature design request.
-- **Does NOT apply to bugfixes** — bugs go through `/boot-bugfix` without
-  OpenSpec; its artifact model (proposal/specs/design/tasks) is overkill for
-  a targeted fix.
-- OpenSpec slash commands: `/opsx:propose`, `/opsx:apply`, `/opsx:archive`.
-  The CLI (`openspec`) is installed globally via npm; init it per-project.
+- **Every non-trivial code change must start with `/opsx:propose "<description>"`.**
+  This includes features, refactors, multi-file bugfixes, and chores. Do not
+  open editors or run `Edit`/`Write` against project source until an `/opsx`
+  proposal exists for the change.
+- **Carve-out — trivial fixes only.** Skip `/opsx` for single-line typo fixes,
+  comment edits, formatting-only changes, or one-line dependency bumps where
+  intent is self-evident from the diff. When in doubt, propose first.
+- **Multi-file bugfixes go through `/opsx`, not `/boot-bugfix` alone.** A bug
+  whose fix touches >1 file or crosses a serialization boundary needs the
+  proposal/specs/tasks artifacts so the design is captured before code lands.
+  `/boot-bugfix` is reserved for targeted single-file fixes.
+- **Repo without `openspec/`.** If the repo has no `openspec/` directory at the
+  root, ask the user whether to run `openspec init` first or proceed without
+  OpenSpec for this task. Do not silently skip the gate.
+- **Slash commands**: `/opsx:propose`, `/opsx:apply`, `/opsx:archive`. The CLI
+  (`openspec`) is installed globally via npm; init it per-project.
+- **Why**: requested 2026-05-25. Without an upfront proposal, design decisions
+  get rediscovered mid-implementation, parity bugs ship, and PRs need
+  immediate follow-ups. Forcing the artifact moves the thinking left.
 
 ## Sensitive Data
 

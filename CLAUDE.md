@@ -129,6 +129,28 @@ Read @LEARNINGS.md
   get rediscovered mid-implementation, parity bugs ship, and PRs need
   immediate follow-ups. Forcing the artifact moves the thinking left.
 
+## Source Code Comments
+
+- When **caveman mode is active** (`/caveman lite|full|ultra` or any caveman skill
+  loaded by the harness), write inline source-code comments (`//`, `#`, short
+  JSDoc bodies) in caveman style: drop articles, filler, and hedging; fragments
+  OK; short synonyms allowed. Apply matching intensity to comments as the active
+  caveman level.
+- This **overrides** the default caveman boundary that says "code/commits/security
+  write normal." That boundary still applies to **commit messages**, **PR titles
+  and bodies**, and **security warnings** — those stay in normal prose.
+- Never abbreviate identifiers, function names, error strings, API paths,
+  config keys, or other technical tokens. Comment prose compresses; code symbols
+  do not.
+- Verbose vs caveman example for an inline comment:
+  - Normal: `// Reset cross-page Select All state so reopening the panel after a close does not inherit stale bulk-selection intent.`
+  - Caveman (full): `// Reset cross-page Select All on close. Else header stays checked w/ empty selectedRows, unselectedIds bleed into next session.`
+- When caveman mode is **off** (`stop caveman` / `normal mode`), revert to
+  normal comment prose immediately. Do not retroactively rewrite comments
+  written under the other regime unless asked.
+- Defer to project-level `CLAUDE.md` if it specifies a different comment
+  convention.
+
 ## Sensitive Data
 
 - NEVER commit passwords, API keys, access key IDs, service account credentials, tokens,

@@ -63,6 +63,10 @@ mcp.json
 !hooks/
 !hooks/**
 
+# Agents (custom subagent definitions)
+!agents/
+!agents/**
+
 # Explicitly ignore ephemeral/sensitive directories
 backups/
 cache/

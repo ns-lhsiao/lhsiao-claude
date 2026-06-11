@@ -4,10 +4,13 @@ description: >-
   Reviews the **new-code test coverage** of a GitHub pull request — the lines
   added or modified by the PR — and writes additional unit tests to close the
   uncovered gaps. Mirrors SonarQube new-code coverage semantics: only the diff
-  lines count, not whole-file %. Triggers on "review new code coverage",
-  "improve PR coverage", "add tests for #N", or `/review-new-code-coverage`.
+  lines count, not whole-file %. Optionally cross-checks against SonarQube's
+  authoritative per-file `new_coverage` (via the `webui-balkan/sonarqube-debug`
+  plugin scripts) and surfaces non-coverage QG failures (code smells, bugs)
+  before declaring done. Triggers on "review new code coverage", "improve PR
+  coverage", "add tests for #N", or `/review-new-code-coverage`.
 argument-hint: "[pr# | repo#pr | org/repo#pr | pr-url | --base <ref> | --vs <ref>]  (omit → infer from current branch)"
-allowed-tools: Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(python3:*), Read, Edit, Write, Grep, Glob
+allowed-tools: Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(python3:*), Bash(bash:*), Bash(curl:*), Bash(find:*), Read, Edit, Write, Grep, Glob
 user-invocable: true
 ---
 
@@ -22,6 +25,49 @@ the coverage bar before landing.
 ## Context
 
 $ARGUMENTS
+
+---
+
+## SonarQube Cross-Check (optional, Mode A only)
+
+Local coverage is the **primary** signal — fast, scoped to the diff, runs
+without network. SonarQube is the **authoritative** signal — it owns the
+quality gate verdict that blocks the PR. Both can disagree:
+
+- Local says 100% but SQ flags a file < 80%: the scoped test glob excluded
+  a file SQ counted (barrel re-export, lazy-loaded route, MSW handler the
+  product code imports at runtime).
+- SQ says 100% but local has gaps: scoped test set was narrower than the
+  SQ analysis run.
+- QG fails on **non-coverage** metrics (cognitive complexity, duplications,
+  new code smells) that this skill would otherwise miss entirely.
+
+When the PR is open and SQ has analysed it, prefer to reconcile both. The
+`webui-balkan/sonarqube-debug` plugin provides three scripts:
+
+```
+${CLAUDE_PLUGIN_ROOT}/skills/sonarqube-debug/scripts/sq-coverage-gap.sh <repo> <pr> [threshold]
+${CLAUDE_PLUGIN_ROOT}/skills/sonarqube-debug/scripts/sq-issues.sh        <repo> <pr> [type]
+${CLAUDE_PLUGIN_ROOT}/skills/sonarqube-debug/scripts/sq-precheck.sh      [pkg-pattern]   # Go only today
+```
+
+`${CLAUDE_PLUGIN_ROOT}` resolves at plugin runtime; if `sonarqube-debug` is
+not installed, fall back to a `find ~/.claude/plugins/cache -path
+'*sonarqube-debug/scripts/sq-coverage-gap.sh' -print -quit` lookup, and if
+still missing skip the SQ phases (they are best-effort).
+
+First run on a host: scripts source `_preflight.sh`, which guides the user
+through `~/.claude/sonarqube.json` setup the first time and exits non-zero.
+Surface that output verbatim — do not retry silently.
+
+SQ project key convention: `ngweb-<repo-name>` (e.g. `ngweb-webui2`,
+`ngweb-mf-client`, `ngweb-ms-webui`). Hard-coded in `sq_project_key`; if a
+repo deviates, the script fails loud — do not fabricate a key.
+
+QG threshold for new-code coverage is **80%** by default (the SQ gate value).
+This skill's local goal is **100%** of `$DIFF_LINES`. Use 80% only as the
+"red on CI" trigger; keep aiming for 100% locally so a single late-arriving
+edit doesn't tip the file under threshold.
 
 ---
 
@@ -160,6 +206,20 @@ new-code coverage. Empty set → exit "No source-code changes to cover."
 ---
 
 ## PHASE 4: Run Coverage
+
+**Pre-step (Mode A only, best-effort): pull SQ's per-file gap list**. If the
+PR has been analysed, this seeds the work list with SQ's authoritative view
+before local coverage runs:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/sonarqube-debug/scripts/sq-coverage-gap.sh \
+  $ORG/$REPO $PR_NUMBER 100
+```
+
+Threshold `100` so any file with even one uncovered new line is listed.
+Capture the file paths into `$SQ_GAP_FILES`. If the script fails (preflight,
+no SQ analysis yet, network), record the reason and continue — local
+coverage remains the primary signal. Do not block on SQ availability.
 
 Resolve the **minimal** set of test files to run:
 
@@ -329,6 +389,42 @@ created/ran them.
 
 ---
 
+## PHASE 8.5: SonarQube Reconcile (Mode A only, best-effort)
+
+After local coverage hits 100% of `$DIFF_LINES`, reconcile against SQ to
+catch what local missed. Skip cleanly if `sonarqube-debug` is not installed
+or SQ has not analysed the PR.
+
+1. **Per-file coverage gap** at the QG threshold:
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/sonarqube-debug/scripts/sq-coverage-gap.sh \
+     $ORG/$REPO $PR_NUMBER 80
+   ```
+   Any file listed = SQ counts new lines that local did not. Common causes:
+   - File imported transitively by a route the scoped test glob didn't load.
+   - Scoped `--collectCoverageFrom` excluded the file. Widen the glob, re-run
+     Phase 4, fill the gap.
+   - SQ analysis includes files local excluded as "test-infra" (handler that
+     also serves a non-test runtime path). Investigate before dismissing.
+2. **Non-coverage QG issues** on new code:
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/sonarqube-debug/scripts/sq-issues.sh \
+     $ORG/$REPO $PR_NUMBER ALL
+   ```
+   This skill's mandate is **coverage**, not refactoring — but flag findings
+   on lines this skill **just modified** (new tests trip cognitive
+   complexity, duplicate setup, etc.). Fix the ones the new tests caused,
+   surface the rest in the Phase 9 report under "SQ findings (out of skill
+   scope)" for the user to triage.
+3. If `sq-coverage-gap.sh` returns `total: 0 file(s) below threshold` AND
+   `sq-issues.sh` returns `total=0` for the new lines, log "SQ in agreement"
+   in the Phase 9 report.
+
+Disagreement between local 100% and SQ < 80% on a file is a real bug in the
+scoped test glob, not noise. Resolve it before declaring done.
+
+---
+
 ## PHASE 9: Report
 
 Print a structured summary. The header line varies by mode:
@@ -346,6 +442,13 @@ After:               148 / 148 covered (100%)
 Tests added:
   src/pages/devices-page/action.test.ts            (+2)
   src/pages/devices-page/components/DeviceTagBulkActionsPanel.test.tsx (+1)
+
+SonarQube cross-check (Mode A):
+  new_coverage:      96.4% (overall, threshold 80%)
+  files < 80%:       0
+  agreement:         ✓ (local 100% on diff lines matches SQ per-file ≥80%)
+  non-coverage QG:   0 new code smells / bugs / vulnerabilities
+  (omit this block in Mode B or if SQ unreachable; flag mismatches loudly)
 
 Unreachable / intentionally uncovered:
   src/pages/devices-page/action.ts:118  — non-Error reject branch (TS guards rule out runtime hit)
@@ -436,6 +539,11 @@ asks. Surface the suggested commit subject in the summary so they can copy/paste
 | Changed file has no coverage entry | Distinguish test-infra (handlers/mocks — out of scope) from product code (widen the scoped test glob, or note no test exists). |
 | Target line stays uncovered after a fighting test | If a sibling test already covers the line, delete the fighting test — don't leave a `.skip`. If it's the only path to the line, document why under "Unreachable / hard-to-test." |
 | Type-only changed lines flagged uncovered | They emit no statements; reclassify as "untracked / N/A," never uncovered. |
+| `sonarqube-debug` plugin not installed | Skip Phase 8.5. Note "SQ cross-check skipped (plugin not installed)" in Phase 9 report. |
+| SQ preflight fails (missing `~/.claude/sonarqube.json`) | Surface the script's guided fix verbatim. Skip Phase 8.5 this run; do not auto-create the creds file. |
+| PR not yet analysed by SQ | `sq-coverage-gap.sh` returns `new_coverage=?%`. Skip Phase 8.5; note in Phase 9. |
+| SQ flags a file local marked covered | Widen the scoped test glob (`--collectCoverageFrom`), re-run Phase 4, then re-run `sq-coverage-gap.sh`. Treat as a real local-glob bug, not noise. |
+| SQ project key not `ngweb-<repo>` | `sq_project_key` fails loud — do not fabricate. Skip Phase 8.5 and surface for the user. |
 
 ---
 
@@ -456,4 +564,11 @@ asks. Surface the suggested commit subject in the summary so they can copy/paste
   zero coverage gain.
 - **Type-only lines aren't coverable.** Drop `interface`/`type`/`import type`
   bodies from the denominator — they produce no statements.
+- **SQ is authoritative for the gate, local is authoritative for "what to
+  test next."** Run local first (fast, scoped, deterministic). Reconcile
+  with SQ in Phase 8.5 only after local is green; SQ disagreement = real
+  test-glob bug, not noise. SQ phases are best-effort — never block on them.
+- **Aim for 100% locally, not 80%.** SQ's QG threshold is 80%; this skill's
+  bar is 100% of `$DIFF_LINES`. The 20% buffer absorbs late edits without
+  tipping the gate.
 - **Defer to project-level CLAUDE.md** when present.

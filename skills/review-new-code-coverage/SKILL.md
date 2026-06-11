@@ -7,7 +7,7 @@ description: >-
   lines count, not whole-file %. Triggers on "review new code coverage",
   "improve PR coverage", "add tests for #N", or `/review-new-code-coverage`.
 argument-hint: "[pr# | repo#pr | org/repo#pr | pr-url | --base <ref> | --vs <ref>]  (omit → infer from current branch)"
-allowed-tools: Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Read, Edit, Write, Grep, Glob
+allowed-tools: Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(npm:*), Bash(npx:*), Bash(node:*), Bash(pnpm:*), Bash(python3:*), Read, Edit, Write, Grep, Glob
 user-invocable: true
 ---
 
@@ -102,11 +102,15 @@ Read project signals **in this order** and stop at the first match:
    from `src/webui/neo`. Don't use `npx jest` (jest 30 vs project's jest 29).
 3. **webui2 monorepo** — `turbo.json` at repo root and `apps/shell/package.json`
    exists. Use Vitest scoped to the shell app. Package name is **`shell`**, not
-   `@ns/shell` — `pnpm --filter @ns/shell` returns "No projects matched". Two
-   working invocations:
-   - `pnpm --filter shell test -- --coverage --reporter=json --coverage.reporter=json --testPathPattern=<glob>`
-   - `cd apps/shell && npx vitest run <pattern> --coverage --coverage.reporter=json`
-   Coverage JSON lands at `apps/shell/coverage/coverage-final.json`.
+   `@ns/shell` — `pnpm --filter @ns/shell` returns "No projects matched".
+   **Vitest does NOT accept Jest's `--testPathPattern`** — pass a positional
+   path or directory instead. Working invocation (run from `apps/shell`):
+   - `cd apps/shell && npx vitest run <dir-or-file-glob> --coverage --coverage.reporter=json --coverage.reportsDirectory=./coverage-ncc`
+   Use a dedicated `--coverage.reportsDirectory` (e.g. `coverage-ncc`) so the
+   run doesn't clobber the repo's normal `coverage/`; clean it up afterward
+   (`rm -rf coverage-ncc`). Despite the v8 provider, `coverage-final.json` is
+   **istanbul-shaped** (`statementMap` + `s` counters) — Phase 5 parsing applies
+   as written.
 4. **Generic Jest** — `package.json` declares `jest` as dep/devDep.
 5. **Vitest** — `package.json` declares `vitest`. Use `vitest run --coverage`.
 6. **Other** — bail with: "Unsupported test runner. Add support to skill or
@@ -133,8 +137,22 @@ git diff --unified=0 $BASE_SHA...HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx' \
 Parse `+` hunks into `(file_path, line_number)` pairs. Exclude:
 
 - Test files themselves (already excluded above)
-- Pure-comment / blank-line additions
+- Pure-comment / blank-line additions (lines whose stripped body starts with
+  `//`, `*`, or `/*`, or is empty)
 - Generated files (e.g., `*.gen.ts`, OpenAPI clients in `src/utils/api/generated/`)
+- **Type-only declarations** — lines inside `interface`/`type` bodies, bare
+  `import type` lines, and `as const` map *type* annotations. These emit **no
+  executable statements**, so the coverage provider produces no `statementMap`
+  entry for them. Counting them as "diff lines" inflates the denominator and
+  surfaces them as permanently-uncovered noise. In Phase 5 a diff line with **no
+  intersecting statement at all** (not merely count 0) is "untracked" — treat as
+  not-applicable, never as uncovered. Whole files that are pure types
+  (`*.types.ts`, `*.constants.ts` of literal maps) typically contribute zero
+  executable lines; expect them to drop out entirely.
+
+Prefer a small script (Python/node) over hand-parsing: walk `git diff
+--unified=0`, track the `@@ +start` line counter, collect added non-comment
+lines per file. Hand-counting hunks across 20+ files is error-prone.
 
 Store the resulting set as `$DIFF_LINES`. This is the **denominator** for
 new-code coverage. Empty set → exit "No source-code changes to cover."
@@ -165,6 +183,25 @@ NODE_OPTIONS='--max-old-space-size=8192' npm test -- \
 Output lands at `coverage/coverage-final.json`. If the run **fails** (red
 test, type error), fix or report before continuing — coverage data from a
 failed run is unreliable.
+
+**Flag-gated / conditionally-mounted code:** a changed component may be dark
+not because no test exists, but because every existing test's setup gates it
+off (a feature flag left `false`, a parent that never renders it, a mode the
+suite doesn't exercise). Before concluding "no coverage," check the render
+predicate: `useFlag(...)`, `if (!flags.x) return null`, a `<TabsContent>` whose
+parent gates on a flag. The fix is usually a new test that flips the gate on,
+not a rewrite. (Repro: webui2 client-config — `AiSecurityTab` and the
+auto-reenable field were entirely uncovered because the two PR flags
+`mvpAiDiscovery` / `autoReenable` were absent from every `allFlagsOn` mock.)
+
+**Files with no coverage entry at all:** a changed source file may be absent
+from `coverage-final.json` because **no test in the scoped run imports it**
+(common for MSW handlers, mock factories, barrel files, test-infra). Don't
+report these as "0% uncovered product code" — distinguish three buckets:
+covered, uncovered-but-tracked, and **no-entry**. No-entry test-infra files
+(handlers, fixtures) are out of scope; no-entry *product* files mean the scoped
+test set is too narrow — widen `<dir-or-file-glob>` to pull in a test that
+imports them, or note that the file genuinely has no test yet.
 
 ---
 
@@ -242,20 +279,53 @@ green or a line is genuinely unreachable (error path requires platform
 failure, type-narrowing dead code, etc.) — note any unreachable line in
 the summary.
 
+**Assert the cheapest signal that exercises the line — coverage is the goal,
+not a perfect end-to-end assertion.** A render branch is covered the moment the
+element mounts; you do NOT need to assert its exact text. In particular:
+
+- **Don't assert interpolated i18n strings or validation-error message text in
+  jsdom.** RHF's `formState.errors` proxy + controlled number inputs have a
+  one-render lag in jsdom, so an error `<span>` may mount empty or a frame late
+  even when the schema rejected the value. The line is already covered by the
+  branch that renders the span; asserting `findByText('Must be at most 1440
+  minutes')` adds flakiness for zero coverage gain. Assert the element's
+  presence by `data-testid`/`role`, or skip the assertion entirely if the
+  show/hide branch is already exercised by a sibling test.
+- **Prefer render-presence over behavior round-trips.** "Toggle on → nested
+  input appears" and "toggle off → input absent" cover both arms of a
+  conditional cheaply and deterministically.
+- If a planned test fights the runner (portaled Radix content, debounced
+  effects, RHF proxy timing) and the target line is **already green** from
+  another test, drop the fighting test rather than `.skip` it — a lingering
+  `.skip` reads as a real gap to the next reader. Confirm the line is covered
+  first, then delete.
+
 ---
 
 ## PHASE 8: Lint & TypeCheck
 
-Before reporting done:
+Before reporting done, run the project's actual toolchain — do NOT assume
+`tsc`/`eslint`:
 
-```bash
-npx tsc --noEmit
-npx eslint <changed-test-files>
-```
+- **mf-client / generic Jest projects:** `npx tsc --noEmit` + `npx eslint <files>`
+- **webui2:** `npx tsgo --project tsconfig.app.json --noEmit` (not `tsc`),
+  `pnpm exec oxlint <files>` (not eslint; run from `apps/shell` with paths
+  relative to it — `oxlint` reports "No files found to lint" on a path that
+  doesn't resolve from cwd), and `npx oxfmt --check <files>` from repo root.
+  oxfmt failures are auto-fixable: `npx oxfmt <files>` then re-check. The
+  pre-commit hook runs oxfmt, so an unformatted test will be reformatted on
+  commit anyway — format it yourself first so the committed diff is clean.
 
 Fix any errors the new tests introduced. **Don't** bypass with `--no-verify`
-or `// eslint-disable-next-line` unless absolutely necessary — the project's
+or an inline disable comment unless absolutely necessary — the project's
 pre-commit hooks will catch the same issues.
+
+**Shell-cwd caveat:** the Bash tool does not persist `cd` between calls (the
+shell re-initializes each invocation). Writing a probe/temp test with a
+relative path in one call and running it in the next will fail with "no such
+file or directory." Either prefix each command with the `cd` (compound command)
+or use absolute paths. Clean up any temp probe files in the same call that
+created/ran them.
 
 ---
 
@@ -318,8 +388,22 @@ asks. Surface the suggested commit subject in the summary so they can copy/paste
   not `@ns/shell`.
 - Linter: oxlint (not eslint). Vitest globals are NOT recognized — always
   `import { describe, it, expect, vi } from 'vitest';` in test files.
+- Typecheck: `npx tsgo --project tsconfig.app.json --noEmit` (prints `ok`).
+  Format: `npx oxfmt --check <files>` (root) / `npx oxfmt <files>` to fix.
+- Coverage: `npx vitest run <dir> --coverage --coverage.reporter=json
+  --coverage.reportsDirectory=./coverage-ncc` from `apps/shell`. NO
+  `--testPathPattern` (Jest-only). `coverage-final.json` is istanbul-shaped.
+- **Flag-gated components are the usual coverage gap.** Existing suites share
+  an `allFlagsOn` mock object passed to `vi.mock('../hooks/useClientConfigFlags')`;
+  a newly-added flag-gated tab/field is dark until a test adds that flag key.
+  The fix is a new `*.coverage.test.tsx` that spreads the standard mock plus the
+  missing flags and drives the modal/page so the gated subtree mounts.
 - MSW server starts globally via `vitest.setup.ts`; per-test handlers go
-  through `server.use(...)`.
+  through `server.use(...)`. The `@ngweb/runtime` `http` client needs an
+  absolute-URL shim in jsdom — copy the `vi.mock('@ngweb/runtime', ...)` block
+  from a sibling `ConfigModal.*.test.tsx` verbatim.
+- MSW handler files / mock factories often have **no coverage entry** (no test
+  imports them directly) — that's expected test-infra, not a product gap.
 - **Radix / `@ntskui/react` Select branch coverage**: trigger components
   (`Select`, `Combobox`, `Checkbox` rendered as `button[role=...]`) cannot be
   driven by `fireEvent.click` reliably in jsdom — pointer events + portaled
@@ -348,7 +432,10 @@ asks. Surface the suggested commit subject in the summary so they can copy/paste
 | Coverage run fails (test red) | Report the failure, do not write new tests on top of broken state. |
 | Existing test file uses incompatible style | Surface the mismatch, propose the new style, ask before proceeding. |
 | Genuinely unreachable line | Document in summary under "Unreachable" — don't add throwaway tests just to bump %. |
-| Pre-commit hook would fail | Run `tsc --noEmit` and `eslint` proactively in Phase 8. |
+| Pre-commit hook would fail | Run the project's typecheck + linter + formatter proactively in Phase 8 (Phase 8 lists per-runner commands). |
+| Changed file has no coverage entry | Distinguish test-infra (handlers/mocks — out of scope) from product code (widen the scoped test glob, or note no test exists). |
+| Target line stays uncovered after a fighting test | If a sibling test already covers the line, delete the fighting test — don't leave a `.skip`. If it's the only path to the line, document why under "Unreachable / hard-to-test." |
+| Type-only changed lines flagged uncovered | They emit no statements; reclassify as "untracked / N/A," never uncovered. |
 
 ---
 
@@ -363,4 +450,10 @@ asks. Surface the suggested commit subject in the summary so they can copy/paste
 - **Never commit** unless the user asks — surface the commit subject only.
 - **Match existing test style** — duplicate mocks and divergent setup are
   an anti-pattern that compounds over time.
+- **Coverage is the bar, not assertion fidelity.** Exercise the line with the
+  cheapest deterministic signal (render-presence by testid/role). Don't chase
+  interpolated-text or RHF-error-message assertions that flake in jsdom for
+  zero coverage gain.
+- **Type-only lines aren't coverable.** Drop `interface`/`type`/`import type`
+  bodies from the denominator — they produce no statements.
 - **Defer to project-level CLAUDE.md** when present.

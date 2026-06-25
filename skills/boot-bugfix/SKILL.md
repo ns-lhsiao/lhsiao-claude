@@ -6,7 +6,7 @@ description: >-
   require understanding before fixing. Triggers on "/boot-bugfix" or when the
   user wants to fix a bug with a structured workflow.
 argument-hint: "<ENG-1234 | issue# | bug description>"
-allowed-tools: Bash(*), Read, Write, Edit, Grep(*), Glob(*), Task, WebFetch, AskUserQuestion
+allowed-tools: Bash(*), Bash(playwright-cli:*), Read, Write, Edit, Grep(*), Glob(*), Task, WebFetch, AskUserQuestion
 user-invocable: true
 ---
 
@@ -117,20 +117,70 @@ Before opening a PR, do a quick self-review:
 
 ---
 
-## PHASE 5b: Manual Validation (mf-client changes only)
+## PHASE 5b: Browser Validation (UI changes only)
 
-**Gate:** Only run this phase if the fix touches files under
-`netskope-ng-base/frontends/mf-client/`.
+**Gate:** Only run this phase if the fix touches UI files (mf-client under
+`netskope-ng-base/frontends/mf-client/`, or webui2 under `apps/`/`packages/`).
 
-1. Check if the dev environment is already running (look for processes on ports
-   `9797`, `8017`, or the webui watch build). If not running, invoke
-   `/init-dev-env` to start the full local stack.
-2. Once the dev environment is up, invoke `/mf-client-playwright` to launch a
-   headed browser, auto-login, and pause for manual testing.
-3. Ask the user to verify the fix in the browser and confirm it works before
-   proceeding to commit.
+Drive the validation yourself with **`playwright-cli`** — do NOT launch a headed
+browser. Headed mode steals window focus and interrupts the user. Every command
+runs headless by default; never pass `--headed`.
 
-If the user reports the fix doesn't work, return to **Phase 4** to iterate.
+### 1. Ensure dev environment is running
+
+Check for the local stack (ports `9797`/`8017` for mf-client, `3000` for webui2).
+If not running, invoke `/init-dev-env` first.
+
+### 2. Plan validation steps
+
+Produce a numbered validation plan from the changed files and bug description
+(what to check, selector, pass condition). Present it before executing.
+
+### 3. Reuse a persistent session
+
+`playwright-cli` keeps a browser session alive across invocations via its daemon.
+Use a stable session name so repeat runs reuse the same browser instead of
+spawning orphans:
+
+```bash
+playwright-cli list                      # show live sessions
+playwright-cli -s=bugfix open            # headless by default; reuses if exists
+```
+
+### 4. Read credentials and log in (only if needed)
+
+```bash
+source /Users/lhsiao/.claude/skills/mf-client-playwright/.env
+```
+
+Check the current URL; only run the login flow when on `about:blank`/`/login`/
+`/locallogin`. SPA navigation uses hash assignment, NOT `goto` (a full reload
+loses the session and re-bootstraps the micro-frontend for 30–60s):
+
+```bash
+playwright-cli -s=bugfix eval "() => { window.location.hash = '#/<route>'; }"
+```
+
+Wait for a known readiness element before asserting (micro-frontend load is slow).
+
+### 5. Assert and capture proof
+
+For each planned step, perform the action/assertion, then capture a screenshot
+as evidence:
+
+```bash
+playwright-cli -s=bugfix screenshot --filename /tmp/bugfix-step-N.png
+```
+
+Use `--full-page` when the assertion target may be below the fold.
+
+### 6. Report with proof
+
+Present a PASS/FAIL summary to the user and **attach the screenshots** as proof
+of the validated behavior (Read each `/tmp/bugfix-step-N.png` so it renders).
+Leave the session alive for reuse; do not `close`.
+
+If any step fails, return to **Phase 4** to iterate.
 
 ---
 

@@ -151,6 +151,14 @@ Read @LEARNINGS.md
 - Defer to project-level `CLAUDE.md` if it specifies a different comment
   convention.
 
+## HTML Reports
+
+- Any HTML report you generate (summaries, reviews, dashboards, etc.) MUST be written to
+  `/Users/lhsiao/ns/git/all-html/<project>/<name>.html`, never into a project's own repo
+  directory. `<project>` is a short kebab-case slug for the task/repo the report is about.
+- Create the `<project>` subdirectory if it doesn't exist.
+- Defer to project-level CLAUDE.md if it specifies a different output location.
+
 ## Sensitive Data
 
 - NEVER commit passwords, API keys, access key IDs, service account credentials, tokens,
@@ -162,3 +170,5 @@ Read @LEARNINGS.md
 - `~/.claude` is a git repo tracking user-authored config (`ns-lhsiao/lhsiao-claude`).
 - Tracked files: CLAUDE.md, LEARNINGS.md, settings.json, skills/, scripts/
 - After modifying tracked config files, commit and push to keep the repo in sync.
+
+@RTK.md

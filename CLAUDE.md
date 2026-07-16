@@ -157,6 +157,9 @@ Read @LEARNINGS.md
   `/Users/lhsiao/ns/git/all-html/<project>/<name>.html`, never into a project's own repo
   directory. `<project>` is a short kebab-case slug for the task/repo the report is about.
 - Create the `<project>` subdirectory if it doesn't exist.
+- After writing or moving a report, update `/Users/lhsiao/ns/git/all-html/index.html` in the
+  same turn: add a `<li>` under the matching `<project>` `<h2>` group (create the group if new),
+  and bump its `(N)` count. The index is a hand-maintained list, not a directory scan.
 - Defer to project-level CLAUDE.md if it specifies a different output location.
 
 ## Sensitive Data

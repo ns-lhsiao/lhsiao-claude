@@ -64,7 +64,7 @@ Invoke `/start-task` with the Jira ticket key. This creates the branch and works
 Before writing any code, produce a spec-driven design proposal:
 
 1. Check whether the worktree root contains an `openspec/` directory.
-   - If **yes**, invoke `/opsx:propose "<short feature description derived from the Jira summary>"`.
+   - If **yes**, invoke `/opsx:new "<short feature description derived from the Jira summary>"`.
    - If **no**, ask the user: "This repo isn't initialized for OpenSpec. Run
      `openspec init` now, or skip OpenSpec for this task?" Proceed based on the answer.
 2. Review the generated proposal/specs/design/tasks artifacts with the user before
@@ -101,7 +101,7 @@ Remind the user they can run `/finish-up <pr#>` once reviews and CI are green.
    BRANCH="${GH_USER}/${SLUG}"
    ```
 2. **OpenSpec proposal**: if the worktree has `openspec/`, invoke
-   `/opsx:propose "<description>"` before implementing. Otherwise ask whether
+   `/opsx:new "<description>"` before implementing. Otherwise ask whether
    to run `openspec init` or skip.
 3. Implement collaboratively (same as Step 3 in Phase 2B).
 4. Commit with Conventional Commits style (no Jira prefix).

@@ -54,6 +54,8 @@ mcp.json
 !skills/component-split/**
 !skills/review-new-code-coverage/
 !skills/review-new-code-coverage/**
+!skills/sidecar/
+!skills/sidecar/**
 
 # Slash commands (global custom commands)
 !commands/

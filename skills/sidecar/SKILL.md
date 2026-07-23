@@ -5,9 +5,10 @@ description: >-
   asks about sidecar deploys, mentions "sidecar", "npe sidecar", "pr sidecar",
   "on-demand deploy", references a PR + tenant and wants to test the branch on
   their tenant, or invokes /sidecar. Read-only: answers questions, inspects a
-  PR's sidecar deploy run/status, computes the release name + URL path prefix,
-  and explains how to route a tenant to the sidecar. Does NOT trigger deploys or
-  approve environment gates — it tells the user how, it does not do it.
+  PR's sidecar deploy run/status, computes the release name,
+  and explains how to route a tenant to the sidecar via the `x-npe-env` header.
+  Does NOT trigger deploys or approve environment gates — it tells the user how,
+  it does not do it.
 ---
 
 # ngweb-v2 PR Sidecar Deployments
@@ -18,8 +19,8 @@ tested on a real tenant without touching the running primary service. Isolation
 is by Kubernetes label + a per-suffix Ingress path — **not** by namespace.
 
 This skill is **read-only knowledge + inspection**. It answers sidecar
-questions, inspects a given PR's sidecar deploy, computes the release name and
-URL routing, and explains how to point a tenant at the sidecar. It never
+questions, inspects a given PR's sidecar deploy, computes the release name, and
+explains how to point a tenant at the sidecar via the `x-npe-env` header. It never
 triggers a deploy or approves an environment gate; when action is needed it
 tells the user the exact step to take themselves.
 
@@ -138,31 +139,43 @@ the deploy succeeded — the route info below.
 
 ## Route a tenant to a sidecar
 
-The sidecar shares the tenant's namespace; it's reached by URL path prefix. The
-deploy step emits the exact rule (`generate_pr_deployment.sh`):
+Tenant traffic is routed to a sidecar by **injecting the `x-npe-env` request
+header** whose value is the sidecar suffix (e.g. `npe-pr-1242`, `npe-dev-louis`)
+— NOT by changing the URL. The URL the user visits is unchanged
+(`https://{tenant}/mf/client/...`). One header controls both microfrontend
+assets and microservice APIs, via two different mechanisms:
 
-```
-redirect {tenantURL}{ROUTE_PREFIX}/(.*)  →  {tenantURL}{ROUTE_PREFIX}/{release-suffix}/$1
-```
+| Traffic | Layer | Mechanism | Where it lives |
+|---------|-------|-----------|----------------|
+| `/mf/*` (microfrontend assets) | **ngssl (nginx)** | nginx **rewrites the path** `/mf/<app>/…` → `/mf/<app>/<env>/…` before proxying to ngweb-fe; 404 on the env asset falls back to the original path | the **service repo's** nginx config |
+| `/api/v2/*` (microservice APIs) | **api-gateway (Kong)** | the `ns-upstream-target-overrider` plugin **rewrites the upstream host** `ms-<svc>.ngweb[-v2]` → `ms-<svc>-<env>.ngweb[-v2]`; path untouched; NXDOMAIN falls back to default upstream | **api-gateway-controller** (Kong plugin config) |
 
-`ROUTE_PREFIX` derives from the values template's `ingress.pathPrefix`
-(e.g. `/mf/client/{{ SUFFIX }}` → prefix `/mf/client`). The sidecar's own path
-is `{ROUTE_PREFIX}/npe-{suffix}`.
+So: **mf → nginx path rewrite (service repo); ms → api-gw-controller host
+rewrite (Kong).** Header value is validated against
+`^npe-[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$` and the whole feature is gated to NPE
+(`boomskope.com` domain / `enable_npe_env_routing`) — prod ignores the header.
 
-To test the branch on a tenant `https://{tenant}`:
-- The primary app loads at `https://{tenant}{ROUTE_PREFIX}/...`
-- The sidecar build loads at `https://{tenant}{ROUTE_PREFIX}/npe-{suffix}/...`
+Authoritative references:
+- **Whole picture** (architecture, both mechanisms):
+  https://netskope.atlassian.net/wiki/spaces/ENG/pages/7810187526
+- **How to traffic sidecar deployment (User)** (step-by-step):
+  https://netskope.atlassian.net/wiki/spaces/ENG/pages/7749108007
 
-State the concrete sidecar path for the user's release, and confirm the exact
-`ROUTE_PREFIX` by reading the service's `values_template_path`
-(`ingress.pathPrefix`) rather than assuming — service prefixes differ
-(`/mf/client`, `/mf/homepage`, …). For module-federation apps the sidecar is a
-separate `remoteEntry.js` under the sidecar path; a full-app redirect uses the
-rule above.
+Steps to test a branch on tenant `https://{tenant}`:
 
-If the user needs the header/proxy mechanism for their specific tenant
-(dev-proxy vs deployed ingress), ask which environment before giving exact
-wiring — the path prefix is stable but the redirect mechanism differs.
+1. Install the **ModHeader** Chrome extension (HTTP header injector).
+2. Add request header `x-npe-env: <sidecar-suffix>` (e.g. `x-npe-env: npe-pr-1242`).
+3. Visit the tenant normally — `https://{tenant}/mf/client/...` now serves the
+   sidecar build; any `/api/v2/...` call routes to the matching `ms-*-<env>`
+   sidecar if one exists.
+4. **Verify**: open `https://{tenant}/mf/client/build-info-json` (or
+   `build-info.json`) and confirm the reported deployment suffix is the expected
+   one. Wrong/absent suffix = header not taking effect (or the sidecar isn't
+   deployed yet — the ms path silently falls back on NXDOMAIN).
+
+Confirm the sidecar suffix from the deploy run before stating the header value
+(auto suffix = `pr-{num}` → header value `npe-pr-{num}`; the release is
+`{service}-npe-pr-{num}`). The suffix must satisfy the regex above.
 
 ---
 

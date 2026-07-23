@@ -48,11 +48,17 @@ never abbreviate.
 {service}-npe-{suffix}
 ```
 
-The suffix is sanitized by `generate_pr_deployment.sh`:
-`sed 's/[^a-zA-Z0-9-]/-/g'` → lowercase → **`cut -c1-10`** (max 10 chars) →
-strip leading/trailing `-`. So `deployment_suffix: pr-123` → release
-`mf-client-npe-pr-123`. A long suffix is silently truncated to 10 chars — a
-collision source worth checking.
+The **raw `deployment_suffix` input** is sanitized by
+`generate_pr_deployment.sh`: `sed 's/[^a-zA-Z0-9-]/-/g'` → lowercase →
+**`cut -c1-10`** (max 10 chars) → strip leading/trailing `-`. Then `npe-` is
+prepended and used as the release's suffix. So input `pr-123` → release
+`mf-client-npe-pr-123`.
+
+The 10-char cut applies to the **input, before** the `npe-` prefix — it does
+NOT cap the full `npe-…` string. The auto flow's input is `pr-{num}`, which only
+exceeds 10 chars at an 8-digit PR number, so auto sidecars are never truncated.
+Truncation (and the collision it can cause between two long suffixes that share
+their first 10 chars) is only a concern for **manual** on-demand suffixes.
 
 ### Two ways a sidecar is triggered
 
@@ -116,26 +122,46 @@ Given a PR URL (e.g. `https://github.com/netSkope/mf-client/pull/123`):
    ```
    gh pr view {num} --repo {owner}/{repo} --json number,headRefName,state,title
    ```
-3. Find the sidecar deploy run. Auto sidecars run the `pr-sidecar.yaml`
-   workflow keyed by PR number; find recent runs and match:
+3. Find the sidecar deploy run. The auto flow keys the release on the **PR
+   number**, but the run is listed by its head branch — which is NOT
+   necessarily `pr/*` (e.g. PR #1205, head `feature/ENG-867168/…`, still
+   produced release `mf-client-npe-pr-1205`). So match on the `headRefName` you
+   got in step 2, whatever its prefix:
    ```
-   gh run list --repo {owner}/{repo} --workflow pr-sidecar.yaml --json databaseId,headBranch,event,status,conclusion,createdAt --limit 20
+   gh run list --repo {owner}/{repo} --workflow pr-sidecar.yaml --branch {headRefName} --json databaseId,event,status,conclusion,createdAt --limit 10
    ```
    For a manual deploy, use `--workflow "<Service> SideCar On demand Deploy"`
    (the caller's `name:`), matched by the operator's suffix, not PR number.
-4. Inspect the deploy job — the **PR Deployment Config** step summary carries
-   the computed suffix, release name, and the route line:
+4. Inspect the deploy job. The authoritative suffix is a `::notice::` log line
+   `Deployment suffix: npe-pr-{num}` emitted by the deploy job — grep for it:
    ```
    gh run view {runId} --repo {owner}/{repo}
-   gh run view {runId} --repo {owner}/{repo} --log | grep -iE "deploy suffix|route to sidecar|Route to|npe-"
+   gh run view {runId} --repo {owner}/{repo} --log | grep -iE "Deployment suffix:|Resolved clusters:|npe-"
    ```
+   Job status per job: `gh api repos/{owner}/{repo}/actions/runs/{runId}/jobs --jq '.jobs[] | {name, status, conclusion}'`.
    If the run failed, `gh run view {runId} --repo {owner}/{repo} --log-failed`.
 5. Compute the release name yourself as a cross-check:
-   `{service}-npe-{sanitized-suffix}` (auto suffix = `pr-{num}`; apply the
-   10-char truncation rule).
+   `{service}-npe-{suffix}`. For the auto flow the suffix is `pr-{num}`, so the
+   release is `{service}-npe-pr-{num}` (no truncation — `pr-{num}` only exceeds
+   10 chars at an 8-digit PR number).
 
 Report: mode (auto/manual), release name, target clusters, run status, and — if
 the deploy succeeded — the route info below.
+
+### Reading run status & quick lookups
+
+- **`waiting` / `pending` run, deploy job not started** = the auto flow is
+  parked at the `auto-pr-sidecar` environment approval gate. A reviewer must
+  approve it on the run page before deploy runs — the sidecar does NOT exist
+  yet. This skill does not approve it (see the "will NOT do" section).
+- **Auto vs manual from a bare release name**: a `…-npe-pr-{num}` suffix ⇒ auto
+  (keyed on PR number); any other suffix (`npe-dev`, `npe-demo`, …) ⇒ manual
+  on-demand.
+- **Only have a branch, need the PR number**:
+  `gh pr list --repo {owner}/{repo} --head {branch} --state all --json number,state`.
+- **Multi-cluster**: the deploy resolves each alias in `pr_clusters` (default
+  `qa01`) via `clusters.conf`; the `Resolved clusters:` notice line lists the
+  full cluster names actually targeted.
 
 ## Route a tenant to a sidecar
 
@@ -165,17 +191,42 @@ Steps to test a branch on tenant `https://{tenant}`:
 
 1. Install the **ModHeader** Chrome extension (HTTP header injector).
 2. Add request header `x-npe-env: <sidecar-suffix>` (e.g. `x-npe-env: npe-pr-1242`).
-3. Visit the tenant normally — `https://{tenant}/mf/client/...` now serves the
-   sidecar build; any `/api/v2/...` call routes to the matching `ms-*-<env>`
-   sidecar if one exists.
-4. **Verify**: open `https://{tenant}/mf/client/build-info-json` (or
-   `build-info.json`) and confirm the reported deployment suffix is the expected
-   one. Wrong/absent suffix = header not taking effect (or the sidecar isn't
-   deployed yet — the ms path silently falls back on NXDOMAIN).
+   The SAME header drives both the mf and ms sidecars — set it once.
+3. Visit the tenant normally (URL unchanged) — every request now carries the
+   header and is steered per the two mechanisms above.
+
+The header is shared, but a frontend (`mf-*`) and a backend (`ms-*`) are
+SEPARATE sidecar releases; each must be deployed for its half of the routing to
+take effect. A `mf-client` PR only ships the `mf-client-npe-{suffix}` release —
+`/api/v2/*` calls still route to whatever `ms-*-npe-{suffix}` sidecar exists (or
+fall back to the default upstream if none). To exercise a backend change you
+need that `ms-*` service's own sidecar deployed under the same suffix.
+
+### Verify — microfrontend (`/mf/*`)
+
+Open `https://{tenant}/mf/client/build-info-json` (or `build-info.json`) and
+confirm the reported deployment suffix matches. Wrong/absent suffix = header not
+taking effect, or the mf sidecar isn't deployed.
+
+### Verify — microservice (`/api/v2/*`)
+
+The ms path rewrites the upstream HOST, not the URL, so there is no
+build-info page at a rewritten path. Confirm routing by either:
+- comparing an `/api/v2/<segment>` response with vs without the `x-npe-env`
+  header (a behavior/response difference means the sidecar is serving), or
+- checking the Kong / ms-* sidecar pod logs for the request.
+
+Note the fallbacks: an absent-header or NXDOMAIN (PR closed / not-yet-deployed /
+reaped) request silently routes to the default `ms-<svc>.ngweb[-v2]` upstream —
+so "it still works without the header" does NOT prove the sidecar is serving. A
+deployed ms sidecar with 0 healthy pods returns 502 (intentionally NOT a
+fallback). This half was not exercised in-session — treat the ms verification
+steps as derived from the Whole picture doc, and confirm against it.
 
 Confirm the sidecar suffix from the deploy run before stating the header value
-(auto suffix = `pr-{num}` → header value `npe-pr-{num}`; the release is
-`{service}-npe-pr-{num}`). The suffix must satisfy the regex above.
+(auto suffix = `pr-{num}` → header value `npe-pr-{num}`; releases are
+`mf-<svc>-npe-pr-{num}` / `ms-<svc>-npe-pr-{num}`). The suffix must satisfy the
+regex above.
 
 ---
 

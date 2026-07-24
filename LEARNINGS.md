@@ -2,6 +2,14 @@
 
 Topical reference. Each bullet is a self-contained lesson: what failed, why, and the correct approach.
 
+## Caveman Comments in Source Files
+
+- **Rule exists in global CLAUDE.md §Source Code Comments but kept drifting.** Symptom: wrote full-prose `#` comments in `.github/workflows/pr-sidecar.yaml` while caveman full was active. Fix: before writing ANY file with comments, explicitly apply caveman compression to comment prose — drop articles/filler/hedging, fragments OK. Code identifiers (function names, paths, flags) stay exact. Applies to all file types: TS `//`, YAML `#`, JSDoc bodies. Commit messages and PR bodies stay normal prose regardless.
+
+## Git show redirect / RTK hook
+
+- **`git show <branch>:<file> > /tmp/out` can silently produce a 0-byte file** under the RTK shell hook (the rewrite mangles the redirect target). Symptom: `wc -l /tmp/out` shows 0 while the same `git show` piped works. Fix: use process substitution for cross-branch file compares — `diff <(git show origin/A:path) <(git show origin/B:path)` — instead of writing temp files. Confirmed 2026-07 during ENG-1127021 triage.
+
 ## Worktrees, node_modules, Lockfiles
 
 - **mf-client worktree**: symlink `node_modules` from primary (`ln -s ../mf-client/node_modules node_modules`). `npm install`/`npm ci` mutates `package-lock.json` and wastes minutes. Tests, eslint, prettier, craco all resolve through the symlink.
@@ -147,3 +155,6 @@ Topical reference. Each bullet is a self-contained lesson: what failed, why, and
 ## GitHub Actions: local action refs in reusable workflows
 
 - **Step-level `uses: ./.github/actions/<x>` inside a REUSABLE workflow resolves to the CALLER's `$GITHUB_WORKSPACE`, not the reusable workflow's own repo.** Failure: `Can't find 'action.yml' ... under /home/runner/_work/<caller>/<caller>/.github/actions/<x>`. This differs from JOB-level `uses: ./.github/workflows/<x>.yaml` (calling another reusable workflow), which DOES resolve to the repo+ref of the workflow declaring the job. So composite/local actions invoked from a reusable workflow's steps MUST use an absolute `owner/repo/path@ref`. There is no built-in "same ref as this workflow" for `uses:` — hardcoding `@develop` is the common practice; to test a feature branch's action changes end-to-end, temporarily pin the absolute ref to the PR branch and revert to `@develop` before merge. Repro: ngweb-actions service_cicd.yaml manifest-and-deploy (ENG-1052961).
+
+## dnd-kit reorder testing in jsdom (webui2 ntskui DataGrid)
+- **jsdom cannot complete a keyboard-driven sortable reorder with ntskui `DataGridTableDndRows`.** ntskui wires `KeyboardSensor` WITHOUT `sortableKeyboardCoordinates`, so ArrowDown moves by fixed px and never resolves an "over" droppable in a layout-less DOM. Symptom: aria-live announces "Draggable item N was dropped" (pickup + drop fire) but no "moved over droppable" and no reorder/PATCH — for BOTH broken and working code. So a "no PATCH fired" assertion via keyboard drag is a false positive for any drag bug; it's a jsdom artifact. Use a MouseSensor drag with a `getBoundingClientRect` override giving each `tbody tr` a distinct vertical rect, or test in a real browser.

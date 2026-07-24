@@ -56,6 +56,8 @@ mcp.json
 !skills/review-new-code-coverage/**
 !skills/sidecar/
 !skills/sidecar/**
+!skills/webui-devbox-playwright/
+!skills/webui-devbox-playwright/**
 
 # Slash commands (global custom commands)
 !commands/

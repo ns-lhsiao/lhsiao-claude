@@ -51,6 +51,8 @@ Topical reference. Each bullet is a self-contained lesson: what failed, why, and
 - **CM `security` field** can't be set on create ("not on appropriate screen"). Omit it.
 - **CM `customfield_16792` (Type of Change)** is a cascading select: `{"id":"PARENT","child":{"id":"CHILD"}}`. Software > Feature Flag = `13191` / `28422`.
 - **Atlassian MCP fallback to curl**: tools may not be exposed even when `mcp.json` configures the server. Use `curl -s -u "USER:TOKEN" "https://SITE/rest/api/3/..."`. Env vars: `ATLASSIAN_API_TOKEN`, `ATLASSIAN_USER_EMAIL`, `ATLASSIAN_SITE_URL` (NOT `ATLASSIAN_EMAIL`/`ATLASSIAN_SITE`).
+- **Those `ATLASSIAN_*` vars are NOT exported into the shell** — they exist only inside `~/.claude/mcp.json` at `mcpServers.atlassian.env`. Symptom: `curl -u "$ATLASSIAN_USER_EMAIL:$ATLASSIAN_API_TOKEN"` returns non-JSON HTML → `json.decoder.JSONDecodeError: Expecting value: line 1 column 1`; `env | grep ATLASSIAN` returns nothing; `${!v}` gives zsh `bad substitution`. Fix: read the values inside a `python3 -c` one-liner (`json.load(open(os.path.expanduser('~/.claude/mcp.json')))['mcpServers']['atlassian']['env']`) and build the Basic auth header there. Never echo them.
+- **Confluence page fetch by ID**: `GET /wiki/api/v2/pages/<id>?body-format=storage` with the Basic header above. The `/wiki/rest/api/content/<id>?expand=body.storage` v1 path also works.
 - **`~/.claude/mcp.json` contains plaintext tokens** — never commit. The config repo's `.gitignore` excludes it.
 
 ## Webui PHP & Testing

@@ -16,6 +16,7 @@ Topical reference. Each bullet is a self-contained lesson: what failed, why, and
 ## Git show redirect / RTK hook
 
 - **`git show <branch>:<file> > /tmp/out` can silently produce a 0-byte file** under the RTK shell hook (the rewrite mangles the redirect target). Symptom: `wc -l /tmp/out` shows 0 while the same `git show` piped works. Fix: use process substitution for cross-branch file compares — `diff <(git show origin/A:path) <(git show origin/B:path)` — instead of writing temp files. Confirmed 2026-07 during ENG-1127021 triage.
+- **`git show "$B:$P"` inside a bash `for` loop gets its revspec CORRUPTED by the RTK hook** when `$B`/`$P` are shell variables. Symptom: `fatal: ambiguous argument 'origin/Release138k/application/models/Foo.php'` — the hook's rewrite ate a chunk of the path mid-string (`src/webui/system_framewor` vanished, leaving a stray `k`). The bare-`$B`-interpolated form `git show $B:src/...` fails the same way. Fix: prefix the whole thing with `rtk proxy` — `n=$(rtk proxy git show "$B:$P" | grep -c pattern)` — which bypasses the rewrite and returns correct counts. Also note `git log --reverse -S '<literal>' -- <path>` returns EMPTY under the hook but works under `rtk proxy`; a silent-empty pickaxe reads as "never introduced" and will fabricate a wrong origin trace. Always `rtk proxy` pickaxe and cross-branch `git show`. Confirmed 2026-07 during ENG-1133971 triage.
 
 ## Worktrees, node_modules, Lockfiles
 

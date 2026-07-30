@@ -160,6 +160,20 @@ Read @LEARNINGS.md
 - After writing or moving a report, update `/Users/lhsiao/ns/git/all-html/index.html` in the
   same turn: add a `<li>` under the matching `<project>` `<h2>` group (create the group if new),
   and bump its `(N)` count. The index is a hand-maintained list, not a directory scan.
+- **Each `<li>` entry must include a `data-tags` attribute, a `.snippet` div, and a `.tags` div**,
+  matching the structure of existing entries in `index.html`. Required per entry:
+  - `data-tags="tag1 tag2 tag3"` on the `<li>` — space-separated, matches the tag spans below.
+  - `.snippet` — plain-text (no markup) one- or two-sentence summary of the report, max ~160
+    chars, drawn from the report's own intro/first paragraph.
+  - `.tags` — 2 to 4 `<span class="tag tag-<name>">` chips. Reuse an existing tag class from
+    `index.html`'s `<style>` block (e.g. `rca`, `bugfix`, `validation`, `qa-plan`,
+    `playwright-e2e`, `design-review`, `migration`, `todo-checklist`, `runbook`, `onboarding`,
+    `deploy-infra`, `docker`, `nginx`, `k8s`, `steering-config`, `client-config`, `angular`,
+    `webui2`, `feature-flag`, `react`) when it fits. Only invent a new tag when none fit —
+    if you do, add a matching `.tag-<name>` CSS rule (light bg + matching dark text, GitHub
+    label style) to the `<style>` block in the same turn.
+  - The tag bar and search filtering are auto-generated from whatever `.tag` chips exist in the
+    listing — no separate registration step needed beyond adding the chip to the entry.
 - Defer to project-level CLAUDE.md if it specifies a different output location.
 
 ## Sensitive Data
@@ -175,3 +189,6 @@ Read @LEARNINGS.md
 - After modifying tracked config files, commit and push to keep the repo in sync.
 
 @RTK.md
+# graphify
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.

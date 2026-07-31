@@ -174,7 +174,31 @@ Read @LEARNINGS.md
     label style) to the `<style>` block in the same turn.
   - The tag bar and search filtering are auto-generated from whatever `.tag` chips exist in the
     listing — no separate registration step needed beyond adding the chip to the entry.
+- **Stylish template for `/boot-bugfix` and `/boot-feature` reports.** Any HTML report driven by
+  `/boot-bugfix` or `/boot-feature` MUST use the "stylish" dark-GitHub theme established by
+  `fix-devices-search-stale-row/fix-devices-search-stale-row.html` — reuse its `<style>` block
+  verbatim: CSS vars (`--bg:#0d1117`, `--card:#161b22`, `--border:#30363d`, `--accent:#58a6ff`,
+  `--green`/`--red`/`--yellow`), `.wrap` (max-width 960px), `.meta`+`.chip` header, `.card`,
+  `pass`/`fail` table cells, `.shot`+`figcaption` for screenshots, and `.note` (yellow left-border
+  callout). Keep the section order: H1 + `.sub`, meta chips, Root Cause, The Fix (files-touched
+  table), Validation (criteria → unit/coverage → browser table + figures).
+  - Attach the matching tag to the `index.html` `<li>`: `boot-bugfix` for `/boot-bugfix` reports,
+    `boot-feature` for `/boot-feature` reports (in `data-tags` AND as a `.tag` chip). Add a
+    `.tag-boot-bugfix` / `.tag-boot-feature` CSS rule to `index.html`'s `<style>` if absent.
 - Defer to project-level CLAUDE.md if it specifies a different output location.
+
+## Playwright / Browser Validation
+
+- **Confirm a testable target BEFORE driving Playwright.** If the feature under test is not
+  reachable on the current tenant/environment — a required feature flag is off (so webui serves
+  the legacy renderer instead of the fix), the tenant lacks the data/config, or no environment is
+  available — **PAUSE and ask the user** to either toggle the needed feature flag or name another
+  candidate tenant/environment that can fulfill the validation. Do NOT proceed to screenshot a page
+  that isn't actually exercising the change.
+- **Why**: 2026-07-31 (ENG-1152682) a full Playwright run captured the *legacy Angular* devices page
+  because `ng_devices_enabled` was off on the tenant — the React fix was never exercised, and the
+  report + PR had to be redone. Verify the correct renderer is mounted (e.g. via a renderer-specific
+  discriminator) before asserting.
 
 ## Sensitive Data
 

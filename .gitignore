@@ -34,6 +34,9 @@ mcp.json
 !skills/mf-client-playwright/
 !skills/mf-client-playwright/SKILL.md
 # .env in mf-client-playwright contains credentials — stays ignored by default
+!skills/mf-cfw-playwright/
+!skills/mf-cfw-playwright/SKILL.md
+# .env in mf-cfw-playwright contains credentials — stays ignored by default
 !skills/ngs-ticket-creator/
 !skills/ngs-ticket-creator/**
 !skills/cm-ticket-creator/

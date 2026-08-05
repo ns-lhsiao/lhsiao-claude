@@ -2,6 +2,10 @@
 
 Topical reference. Each bullet is a self-contained lesson: what failed, why, and the correct approach.
 
+## Playwright multi-scenario reload / module-singleton state
+
+- **`page.goto(sameUrl+sameHash)` between scenarios is same-document — no reload — so JS module state (valtio proxy singletons, in-memory RBAC caches) leaks scenario A into scenario B.** Symptom (ENG-1118307 mock-first): scenario A ran RBAC `rw`; scenario B set the mock to `r` and re-`goto`'d the identical `#/settings/dns-security` URL, but the store kept `rw`, the withAuthorization HOC never re-fetched `authorize/pagepermissions`, the toggle stayed enabled and a POST fired — read as a product RBAC bug. It was a harness artifact; the unit test proved read-only gating was correct. Fix: bounce `await page.goto('about:blank')` before the second `goto` to force a full document reload (re-inits every module singleton). Tell that it's same-document: prior scenario's toasts/UI still visible in the screenshot. Confirmed 2026-08-05.
+
 ## Caveman Comments in Source Files
 
 - **Rule exists in global CLAUDE.md §Source Code Comments but kept drifting.** Symptom: wrote full-prose `#` comments in `.github/workflows/pr-sidecar.yaml` while caveman full was active. Fix: before writing ANY file with comments, explicitly apply caveman compression to comment prose — drop articles/filler/hedging, fragments OK. Code identifiers (function names, paths, flags) stay exact. Applies to all file types: TS `//`, YAML `#`, JSDoc bodies. Commit messages and PR bodies stay normal prose regardless.

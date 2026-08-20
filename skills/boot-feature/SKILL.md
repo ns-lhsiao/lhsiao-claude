@@ -94,7 +94,8 @@ proxy — all on **SLOT-offset ports** so parallel feature envs don't collide. F
 `N`: proxy `9797+N`, mf-client `8017+N*100`, devbox web TLS `8443+N` (webui2 dev
 server `3000`). Read the actual slot/ports from `init-dev-env`'s printed summary
 (registry `devbox-ui/.devenv-slots.json`) and target the proxy URL it emits — do NOT
-assume bare `9797`/`8017`. For a webui (Angular) change, `webui-devbox-playwright`
+assume bare `9797`/`8017`. For a **webui2** change, invoke `/wb:setup:angular-shell`
+first to set up the Angular shell dev server, then `webui-devbox-playwright`
 covers the worktree build + repoint.
 
 **Playwright is not in `mf-client node_modules`** — install in `/tmp/pw-runner`:

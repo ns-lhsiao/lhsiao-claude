@@ -69,7 +69,7 @@ Run the three steps below in sequence without stopping for user confirmation bet
    - Check whether the worktree root contains an `openspec/` directory.
      - If **no**, ask the user: "This repo isn't initialized for OpenSpec. Run
        `openspec init` now, or skip OpenSpec for this task?" Proceed based on answer.
-   - Do NOT pause for user sign-off when exploration is complete — proceed immediately.
+   - When exploration completes, immediately invoke `/opsx:ff` in the same turn. Do NOT pause, summarize, or ask for confirmation.
 
 2. **Fast-forward artifacts**: Invoke `/opsx:ff "<change name>"` using the findings from
    explore to populate proposal, design, and tasks without further prompts.
@@ -84,7 +84,18 @@ Run tests and lint after `/opsx:apply` completes (detect from `Makefile`, `go.mo
 
 ### Step 3.5: Playwright Validation (UI features only)
 
-After implementation, validate the changed UI flow end-to-end using Playwright with `headless: false, channel: 'chrome'` (devbox WebUI rejects headless Chromium).
+After implementation, validate the changed UI flow end-to-end using Playwright with `headless: true`.
+
+**Dev env is per-worktree + isolated.** Invoke `/init-dev-env <slug>` with the SAME
+slug as this task's worktree (from `/start-task`, or the Phase 2C `SLUG`). It stands
+up per-slug devbox `web-<slug>`/`angular-ui-<slug>` (sharing the base stack's DB +
+sidecars over the `devbox-ui_default` network), the mf-client dev server, and the dev
+proxy — all on **SLOT-offset ports** so parallel feature envs don't collide. For slot
+`N`: proxy `9797+N`, mf-client `8017+N*100`, devbox web TLS `8443+N` (webui2 dev
+server `3000`). Read the actual slot/ports from `init-dev-env`'s printed summary
+(registry `devbox-ui/.devenv-slots.json`) and target the proxy URL it emits — do NOT
+assume bare `9797`/`8017`. For a webui (Angular) change, `webui-devbox-playwright`
+covers the worktree build + repoint.
 
 **Playwright is not in `mf-client node_modules`** — install in `/tmp/pw-runner`:
 ```bash

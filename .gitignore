@@ -62,6 +62,10 @@ mcp.json
 !skills/webui-devbox-playwright/
 !skills/webui-devbox-playwright/**
 
+# Knowledge index files
+!knowledge/
+!knowledge/**
+
 # Slash commands (global custom commands)
 !commands/
 !commands/**

@@ -104,6 +104,13 @@ Read @LEARNINGS.md
 - **Description**: concise prose explaining **why** the change was made. Place a single
   closing keyword on its own line at the end: `Fixes #42` or reference the Jira key like
   `ENG-1234`.
+- **Screenshots**: When Playwright validation produced screenshots, embed them in the PR
+  description under a `## Validation` heading using `![caption](url)`. Screenshots must be
+  hosted first — either drag-drop into the GitHub PR web editor (yields a
+  `github.com/user-attachments/...` URL) or push to a gist/asset host and reference the raw
+  URL. Never reference a local file path; GitHub markdown will not render it. If the shots
+  already live under `all-html/<project>/` (see **HTML Reports**) and are hosted, reference
+  the same URLs so the report and PR share one source.
 - **Merge method**: squash merge only when merging via API.
 - Defer to project-level CLAUDE.md if it specifies different PR conventions.
 

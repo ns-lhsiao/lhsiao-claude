@@ -61,6 +61,8 @@ mcp.json
 !skills/sidecar/**
 !skills/webui-devbox-playwright/
 !skills/webui-devbox-playwright/**
+!skills/review-pr/
+!skills/review-pr/**
 
 # Knowledge index files
 !knowledge/

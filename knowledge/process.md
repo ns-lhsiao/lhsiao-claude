@@ -14,6 +14,8 @@
 ## RTK Proxy
 
 - **RTK hook swallows grep output in some contexts.** Bare `grep` via the shell hook shows `"X matches in 0 files: [+N more]"` with no actual content. Fix: prefix with `rtk proxy` — e.g. `rtk proxy grep -n "pattern" file.php`. Same applies to other commands whose output RTK filters but shouldn't.
+- **RTK's `find` wrapper rejects compound predicates.** `find . -iname "X" -o -iname "Y"` errors with `rtk find does not support compound predicates or actions (e.g. -not, -exec). Use find directly.` Fix: either run two separate single-predicate `find` calls, or fall back to plain `grep`/`find` without the RTK hook for anything needing `-o`/`-not`/`-exec`.
+- **RTK's `grep` is ripgrep underneath — BRE-style `\|` alternation with literal parens can throw `regex parse error: unclosed group`.** `grep -n 'foo(\|bar('` fails; ripgrep doesn't parse the escaped-parenthesis-before-`\|` the way GNU grep's BRE does. Fix: use `grep -nE 'foo\(|bar\('` (extended regex, escape the literal paren, unescaped `|`).
 
 ## Collecting Secrets From the User
 

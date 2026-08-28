@@ -15,6 +15,11 @@
 
 - **RTK hook swallows grep output in some contexts.** Bare `grep` via the shell hook shows `"X matches in 0 files: [+N more]"` with no actual content. Fix: prefix with `rtk proxy` — e.g. `rtk proxy grep -n "pattern" file.php`. Same applies to other commands whose output RTK filters but shouldn't.
 
+## Collecting Secrets From the User
+
+- **`AskUserQuestion` cannot collect a free-text secret value.** Selecting an option only returns that option's LABEL text back to the assistant — even an option literally titled "Give me the password" resolves to that label string, never a value the user typed. If you need a secret (password, token), ask a plain follow-up question in normal chat instead of routing it through `AskUserQuestion` — the tool is for choosing among fixed alternatives, not free-text collection. Confirmed 2026-08-27/28: two consecutive attempts to collect a devbox password via `AskUserQuestion` options both returned only the option label with no secret attached.
+- **Warn the user explicitly not to prefix a secret with `!` when typing it as a reply.** The `!` prefix runs the line as a shell command in this harness; a user pasting a bare password in response to "type the password" can trigger `! Change#123` unintentionally if muscle-memory from other prompts kicks in, surfacing as `command not found` in a `<bash-input>/<bash-stdout>` block instead of reaching you as chat text. When asking for a secret, say "type it as plain text, no `!` prefix."
+
 ## OpenSpec (opsx) Slash Commands
 
 - **`/opsx:propose` doesn't exist** — CLAUDE.md's Planning-with-OpenSpec section names `/opsx:propose`, `/opsx:apply`, `/opsx:archive`, but the actual installed skill set is `opsx:new` (start a change + generate artifacts), `opsx:continue`, `opsx:ff` (new + all artifacts in one go), `opsx:apply`, `opsx:archive`, `opsx:verify`, `opsx:sync`, `opsx:explore`, `opsx:onboard`, `opsx:bulk-archive`. Calling `Skill({skill: "opsx:propose"})` throws `Unknown skill`. Use `opsx:new` for the propose step (or `opsx:ff` for propose+artifacts combined) until CLAUDE.md is corrected.

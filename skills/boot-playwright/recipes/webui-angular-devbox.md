@@ -317,6 +317,31 @@ long time to mount their guard logic):
    This reuses the real session and the real live token with zero
    encoding/header risk, and still gives you the actual JSON error/success body
    to assert on.
+
+   Worked example (ENG-868849, PR #18659 — `Clientconfiguration::saveClientConfig`'s
+   group-scim-id duplicate guard). Curl-equivalent shown for readability — the
+   call actually ran as the in-page `fetch()` above, reusing the live session
+   cookie and live token; `<session>`/`<token>` are real per-request secrets,
+   never paste them literally into a report:
+   ```
+   curl 'https://developer.vbox/settings/clientConfiguration/saveClientConfig' \
+     -H 'Cookie: ci_session=<session>' \
+     -H 'X-Requested-With: XMLHttpRequest' \
+     --data-urlencode 'id=-1' \
+     --data-urlencode 'name=E2E-Test-B-StaleName' \
+     --data-urlencode 'ou_or_group=0' \
+     --data-urlencode 'ou_or_group_name=UG2-renamed-simulated' \
+     --data-urlencode 'group_scim_id=8f19eeea-47f7-455f-b264-06b821598e9f' \
+     --data-urlencode 'token=<token>'
+   ```
+   Result — `HTTP 200`:
+   ```json
+   {"status":"error","netskopeRequestId":"...","errorCode":"General Error","errors":["Group already exists"],"warnings":[""]}
+   ```
+   Report the request AND the literal response body verbatim (not just
+   "passed"/"rejected") — a PR reviewer (or the user) will ask for the raw
+   curl+result if only given a prose summary; capture it the first time so you
+   don't have to re-run the whole session to answer that follow-up.
 3. **For a real before/after proof, do the counterfactual in the SAME live
    session.** Since PHP is live-mounted from the worktree, no rebuild is
    needed: `git checkout <parent-branch> -- <file-with-the-fix>` to temporarily
@@ -325,6 +350,20 @@ long time to mount their guard logic):
    the counterfactual call inserted (check the tenant DB directly, e.g. `docker
    exec web mysql -h mariadb -u root -p1234 <tenant_db> -e "select ..."`) before
    moving on.
+
+   Same worked example, fix stripped — result was `HTTP 500` with an empty
+   body (an unrelated pre-existing crash later in the save path, not the
+   guard rejecting anything). An empty/500 response is NOT itself proof the
+   bug reproduced — confirm via the DB that the row actually got inserted:
+   ```
+   mysql> select id,name,ou_or_group,ou_or_group_name,group_scim_id from client_config;
+   id=4  name=UG2_Config          ou_or_group=0  ou_or_group_name=UG2                        group_scim_id=8f19eeea-...
+   id=6  name=E2E-Test-C-NoFix    ou_or_group=0  ou_or_group_name=UG2-renamed-simulated-2     group_scim_id=8f19eeea-...
+   ```
+   Row 6 shares `group_scim_id` with row 4 under a different
+   `ou_or_group_name` — the exact collision the fix closes — confirming
+   `validateData()` did not reject it before the unrelated crash. Delete the
+   row, restore the fix, rerun once more to confirm the rejection is back.
 4. **Confirm RBAC via `ms-rbac` directly if a page/action looks denied** —
    don't assume seed-data is missing. `curl localhost:3022/roles/<roleId> -H
    "x-netskope-tenantid: <id>" -H "x-netskope-user-role-id: <roleId>" -H

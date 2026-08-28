@@ -46,6 +46,22 @@ Port formula (SLOT is a 1-based integer):
 container publishes TLS on `8443+SLOT`, so anything targeting this env must point
 at `https://developer.vbox:<8443+SLOT>` instead of the bare hostname.
 
+> **Per-slug ports break tenant recognition — this scheme only serves static
+> assets, not logins.** webui's tenant lookup (`NS_Loader::getTenantDataByHost()`)
+> does an EXACT match of `$_SERVER['HTTP_HOST']` (port included) against
+> `core_data.org_info.ui_hostname`, which stores the bare hostname with no port.
+> Hitting `https://developer.vbox:8445/locallogin` fails with "Could not
+> recognize the tenant" even though the container is healthy. If the validation
+> needs to log in or hit any tenant-scoped PHP endpoint (i.e. almost everything
+> beyond loading `angular_view.txt`), skip the per-slug SLOT scheme below and
+> use **Shared stack mode** instead: repoint the base `web`/`angular-ui`
+> containers directly at the worktree with no port offset —
+> `NS_WEB_UI_DIR=<worktree> docker compose up -d --force-recreate web angular-ui`
+> (project name omitted, so it recreates the base containers) — and hit bare
+> `https://developer.vbox`. Only one webui worktree can be served this way at a
+> time; repoint back to primary (`docker compose up -d --force-recreate web
+> angular-ui` with `NS_WEB_UI_DIR` unset) when done.
+
 ## Inputs
 
 - **`<slug>`** — kebab-case feature descriptor. Required.
@@ -154,10 +170,10 @@ volumes:
 services:
   web:
     container_name: web-$SLUG
-    ports: ["$WEB_TLS:443"]
+    ports: !override ["$WEB_TLS:443"]
   angular-ui:
     container_name: angular-ui-$SLUG
-    ports: ["$ANGULAR:80"]
+    ports: !override ["$ANGULAR:80"]
 YAML
 
 NS_WEB_UI_DIR=/Users/lhsiao/ns/git/webui-$SLUG \
@@ -168,6 +184,12 @@ NS_WEB_UI_DIR=/Users/lhsiao/ns/git/webui-$SLUG \
 > Verify external volume names against your machine first —
 > `docker volume ls | grep devbox-ui` — the `devbox-ui_` prefix is the base
 > project name; adjust if the base stack runs under a different `-p`.
+>
+> The `!override` tag on `ports:` is required (Compose v2.24+, confirmed on
+> v2.40.3) — without it, `docker compose -f base.yml -f override.yml`
+> CONCATENATES the two files' `ports:` lists instead of replacing them, so the
+> per-slug container also tries to claim the base stack's port (`4200`, `443`)
+> and fails with `Bind for :::4200 failed: port is already allocated`.
 
 `--force-recreate` is required — the bind-mount source path is fixed at container
 creation, not re-read on a plain restart. Verify the mount and DB reachability:
@@ -249,6 +271,79 @@ done
 A prior investigation in this environment initially concluded "Settings pages are
 permanently blocked by devbox backend connectivity" — wrong; the page loads fine,
 just slowly, and the earlier probe gave up after a few seconds.
+
+## Driving a PHP endpoint directly (e2e validation without a flaky page load)
+
+When the goal is validating a backend (PHP/CodeIgniter) change rather than a UI
+render — e.g. a duplicate-guard, a save endpoint, anything reachable via an
+authenticated POST — skip navigating the Angular page entirely and drive the
+endpoint from an authenticated in-page `fetch()`. This sidesteps two devbox
+footguns that make page-navigation-based validation flaky for some Settings
+pages (parallel initial-load XHRs racing a CSRF token, and pages that take a
+long time to mount their guard logic):
+
+1. **Never recompute the CSRF token from `<meta name="ns-csrf-hash">`.** That
+   meta tag is only correct at initial page bootstrap; `CsrfTokenStore` can
+   refresh it later via `/login/getToken` without updating the tag, so it goes
+   stale mid-session. A token built from the stale tag fails server-side
+   validation (`NS_Security::csrf_verify()`) with "CSRF Token
+   mismatch-CSRF attack suspected" (401), which can cascade into further 401s
+   and a silent bounce to `#/login?reason=loggedout` — easy to misread as an
+   RBAC/permission denial. Always pull the LIVE token instead:
+   ```js
+   const token = window.ns.getCsrfToken();
+   ```
+2. **Skip cookie-cloning into curl — POST via `page.evaluate` + `fetch()`
+   instead.** The session cookie (`ci_session`) is `httpOnly`, so
+   `document.cookie` returns `""`; you'd need `state-save`/`storageState()` to
+   extract it for curl, and then get the `Content-Type`/CSRF field name exactly
+   right. Simpler and more reliable to stay in-page:
+   ```bash
+   playwright-cli -s=<slug> eval "async () => {
+     const token = window.ns.getCsrfToken();
+     const body = new URLSearchParams({ /* ...endpoint fields..., */ token });
+     const resp = await fetch('/settings/<controller>/<method>', {
+       method: 'POST',
+       credentials: 'same-origin',
+       headers: {
+         'Content-Type': 'application/x-www-form-urlencoded',
+         'X-Requested-With': 'XMLHttpRequest', // required or PHP treats it as non-ajax
+       },
+       body: body.toString(),
+     });
+     return { status: resp.status, text: (await resp.text()).slice(0, 800) };
+   }"
+   ```
+   This reuses the real session and the real live token with zero
+   encoding/header risk, and still gives you the actual JSON error/success body
+   to assert on.
+3. **For a real before/after proof, do the counterfactual in the SAME live
+   session.** Since PHP is live-mounted from the worktree, no rebuild is
+   needed: `git checkout <parent-branch> -- <file-with-the-fix>` to temporarily
+   strip the change, rerun the identical `fetch()` call and confirm the bug
+   reproduces, then `git checkout HEAD -- <file>` to restore. Clean up any rows
+   the counterfactual call inserted (check the tenant DB directly, e.g. `docker
+   exec web mysql -h mariadb -u root -p1234 <tenant_db> -e "select ..."`) before
+   moving on.
+4. **Confirm RBAC via `ms-rbac` directly if a page/action looks denied** —
+   don't assume seed-data is missing. `curl localhost:3022/roles/<roleId> -H
+   "x-netskope-tenantid: <id>" -H "x-netskope-user-role-id: <roleId>" -H
+   "x-netskope-user-id: <email>" -H "x-netskope-trid: any-string"` returns the
+   role's real `apiGroups` list with permissions — a bare curl without these
+   headers 500s on an unrelated version-middleware check and can be
+   misdiagnosed as "no permission data seeded".
+5. **Feature flags have no cookie override (control flags do).** If the
+   change under test is gated by a feature flag (not a control flag), the
+   `control_<NAME>` cookie trick (see the cert-rotation section above) does
+   NOT apply — feature flags are read from session data with no local DB
+   row to flip. Fastest local override: a temporary `DEVBOX-TEMP`-tagged
+   early-return in `_isFeatureEnabled()`
+   (`application/helpers/show_feature_helper.php`) for the specific flag name,
+   same pattern as the existing `isRegenerateNeeded()` session-driver
+   workaround. Revert before finishing.
+
+Confirmed end-to-end 2026-08-28 validating ENG-868849 (PR #18659,
+`Clientconfiguration::saveClientConfig`'s new group-scim-id duplicate guard).
 
 ## Standard headless launch
 

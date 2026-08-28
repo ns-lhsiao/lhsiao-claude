@@ -84,33 +84,27 @@ Run tests and lint after `/opsx:apply` completes (detect from `Makefile`, `go.mo
 
 ### Step 3.5: Playwright Validation (UI features only)
 
-After implementation, validate the changed UI flow end-to-end using Playwright with `headless: true`.
+After implementation, validate the changed UI flow end-to-end. Delegate to
+**`/boot-playwright <recipe> <slug>`** — do NOT hand-roll dev-env bootstrap or raw
+Playwright scripts here; `boot-playwright` owns all shared session/login/nav
+mechanics and the four environment recipes.
 
-**Dev env is per-worktree + isolated.** Invoke `/init-dev-env <slug>` with the SAME
-slug as this task's worktree (from `/start-task`, or the Phase 2C `SLUG`). It stands
-up per-slug devbox `web-<slug>`/`angular-ui-<slug>` (sharing the base stack's DB +
-sidecars over the `devbox-ui_default` network), the mf-client dev server, and the dev
-proxy — all on **SLOT-offset ports** so parallel feature envs don't collide. For slot
-`N`: proxy `9797+N`, mf-client `8017+N*100`, devbox web TLS `8443+N` (webui2 dev
-server `3000`). Read the actual slot/ports from `init-dev-env`'s printed summary
-(registry `devbox-ui/.devenv-slots.json`) and target the proxy URL it emits — do NOT
-assume bare `9797`/`8017`. For a **webui (Angular)** change, `webui-devbox-playwright` covers the worktree build + repoint.
-For a **webui2** change, invoke `/wb:setup:angular-shell` to set up the dev server.
+Pick `<recipe>` from the files this task touched:
 
-**Playwright is not in `mf-client node_modules`** — install in `/tmp/pw-runner`:
-```bash
-cd /tmp && mkdir -p pw-runner && cd pw-runner && npm init -y && npm install playwright
-```
+| Touched path | Recipe |
+|---|---|
+| `netskope-ng-base/frontends/mf-client/` | `webui-angular-devbox-mf-client` |
+| `mf-cfw/` | `webui-angular-devbox-mf-cfw` |
+| webui2 `apps/`/`packages/` (Balkan hybrid) | `webui2-angular-shell-devbox` |
+| webui Angular Settings pages, no MFE involved | `webui-angular-devbox` |
 
-**Key patterns** (from LEARNINGS.md):
-- Webui uses hash routing: `/ns#/settings?view=...` (not `/#/...`)
-- SPA navigation: use `page.evaluate(() => { window.location.hash = '#/...'; })` — never `page.goto()` for hash changes (triggers full reload + 30–60s mf-client bootstrap)
-- Login: `waitForFunction(() => !window.location.hash.includes('/login'), { timeout: 30000 })` after clicking sign-in button; dismiss welcome wizard with `text=skip this step`
-- Click Angular components via `page.mouse.click(x, y)` at `getBoundingClientRect()` coords — raw `element.click()` doesn't fire Angular `(click)` bindings
-- Confirm modals: match button text case-insensitively (e.g. `/^continue$/i`)
-- XHR ordering: wait for status-check XHR response before clicking confirm button
+Use the SAME `<slug>` as this task's worktree (from `/start-task`, or the Phase 2C
+`SLUG`). Feed `boot-playwright` the changed-UI-flow context so it can build the
+numbered validation plan (action, selector, pass condition). It reports PASS/FAIL
+per step with screenshots via a `playwright-cli` session it leaves open for reuse.
 
-**Skip this step** if the change has no UI surface (model/helper/controller-only changes with no new UI flow to exercise).
+**Skip this step** if the change has no UI surface (model/helper/controller-only
+changes with no new UI flow to exercise).
 
 ### Step 4: Commit
 

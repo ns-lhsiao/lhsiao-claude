@@ -114,34 +114,29 @@ failure to the human — do NOT proceed to report, archive, or PR.
 ## PHASE 5: Browser Validation (UI changes only) — autonomous
 
 **Gate:** run only if the fix touches UI files (mf-client under
-`netskope-ng-base/frontends/mf-client/`, or webui2 under `apps/`/`packages/`).
-Non-UI fixes skip this phase and rely on Phase 4 tests.
+`netskope-ng-base/frontends/mf-client/`, mf-cfw under `mf-cfw/`, or webui2 under
+`apps/`/`packages/`). Non-UI fixes skip this phase and rely on Phase 4 tests.
 
-Drive with **`playwright-cli`** — headless only. Never pass `--headed` (steals focus).
+Delegate to **`/boot-playwright <recipe> <slug>`** — do NOT hand-roll dev-env
+bootstrap or `playwright-cli` steps here; `boot-playwright` owns all of that.
 
-1. **Dev env**: check the local stack (ports `9797`/`8017` for mf-client, `3000` for
-   webui2). If down, invoke `/init-dev-env` first.
-2. **Validation steps**: turn the Phase 2 validation criteria into a numbered plan
-   (action, selector, pass condition).
-3. **Session**: reuse a stable session so repeats don't spawn orphans:
-   ```bash
-   playwright-cli list
-   playwright-cli -s=bugfix open      # headless; reuses if exists
-   ```
-4. **Login (only if needed)**: `source /Users/lhsiao/.claude/skills/mf-client-playwright/.env`.
-   Check current URL; run login only on `about:blank`/`/login`/`/locallogin`. SPA nav
-   uses hash assignment, NOT `goto`:
-   ```bash
-   playwright-cli -s=bugfix eval "() => { window.location.hash = '#/<route>'; }"
-   ```
-   Wait for a known readiness element before asserting (micro-frontend load is slow).
-5. **Assert + capture**: per step, perform the action/assertion then screenshot proof:
-   ```bash
-   playwright-cli -s=bugfix screenshot --filename /tmp/bugfix-step-N.png
-   ```
-   Use `--full-page` when the target may be below the fold.
-6. **Result**: record PASS/FAIL per step and the screenshot paths — Phase 6 report
-   consumes them. Leave the session alive; do not `close`.
+1. **Pick the recipe** from the files touched in Phase 4 (do not guess if mixed —
+   ask):
+
+   | Touched path | Recipe |
+   |---|---|
+   | `netskope-ng-base/frontends/mf-client/` | `webui-angular-devbox-mf-client` |
+   | `mf-cfw/` | `webui-angular-devbox-mf-cfw` |
+   | webui2 `apps/`/`packages/` (Balkan hybrid) | `webui2-angular-shell-devbox` |
+   | webui Angular Settings pages, no MFE involved | `webui-angular-devbox` |
+
+2. **Invoke**: `/boot-playwright <recipe> <slug>`, using the SAME slug as the
+   Phase 4 worktree, with the Phase 2 validation criteria as context (turned into
+   a numbered plan: action, selector, pass condition — `boot-playwright` follows
+   this format).
+3. **Result**: `boot-playwright` reports PASS/FAIL per step with screenshot paths,
+   using a `playwright-cli` session it leaves open (never closes) — capture both
+   for Phase 6's report.
 
 **Failure policy:** if any step FAILs, return to **Phase 4** and iterate (respecting the
 3-attempt cap). If still failing, STOP and surface to the human — no report, no archive,

@@ -111,12 +111,17 @@ Read @LEARNINGS.md
   against (`mf-client`, `webui`, `webui2`, etc). `{slug}` is the Jira ticket key (`ENG-1234`)
   when the branch has one, otherwise the branch name — resolved once per branch and not
   changed if a ticket gets attached later. Re-running validation on the same branch overwrites
-  the files already at that path; never timestamp or version the directory. Embed each image
-  in the PR description under a `## Validation` heading using
-  `![caption](https://raw.githubusercontent.com/netSkope/pr-screenshots/develop/{repo}/{slug}/screenshots/<file>)`.
+  the files already at that path; never timestamp or version the directory. `netSkope/pr-screenshots`
+  is **private** — `raw.githubusercontent.com` does not carry your GitHub session cookie cross-domain,
+  so images at that host 404/break for viewers on a private repo. Embed each image in the PR
+  description under a `## Validation` heading using the same-origin form instead:
+  `![caption](https://github.com/netSkope/pr-screenshots/raw/develop/{repo}/{slug}/screenshots/<file>)`.
   Never reference a local file path; GitHub markdown will not render it. If the shots also
-  live under `all-html/<project>/` (see **HTML Reports**), reference the same
-  `raw.githubusercontent.com` URLs there too so the report and PR share one source.
+  live under `all-html/<project>/` (see **HTML Reports**), note that this fix only helps *inside a
+  github.com page* (like a PR body) — a standalone HTML report opened outside github.com is a
+  cross-site request either way, so embedded images there may still not render for a private repo;
+  reference the same `github.com/.../raw/...` URLs anyway for consistency, but don't expect them to
+  load from the local file.
 - **Merge method**: squash merge only when merging via API.
 - Defer to project-level CLAUDE.md if it specifies different PR conventions.
 

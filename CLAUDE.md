@@ -104,13 +104,19 @@ Read @LEARNINGS.md
 - **Description**: concise prose explaining **why** the change was made. Place a single
   closing keyword on its own line at the end: `Fixes #42` or reference the Jira key like
   `ENG-1234`.
-- **Screenshots**: When Playwright validation produced screenshots, embed them in the PR
-  description under a `## Validation` heading using `![caption](url)`. Screenshots must be
-  hosted first — either drag-drop into the GitHub PR web editor (yields a
-  `github.com/user-attachments/...` URL) or push to a gist/asset host and reference the raw
-  URL. Never reference a local file path; GitHub markdown will not render it. If the shots
-  already live under `all-html/<project>/` (see **HTML Reports**) and are hosted, reference
-  the same URLs so the report and PR share one source.
+- **Screenshots**: When Playwright validation produced screenshots, host them in the
+  `netSkope/pr-screenshots` repo (owned by Louis, commit+push directly to `develop` — no
+  PR/approval needed) at path `{repo}/{slug}/screenshots/<original-filename>`, keeping the
+  filenames Playwright/the report already produced. `{repo}` is the source repo the PR is
+  against (`mf-client`, `webui`, `webui2`, etc). `{slug}` is the Jira ticket key (`ENG-1234`)
+  when the branch has one, otherwise the branch name — resolved once per branch and not
+  changed if a ticket gets attached later. Re-running validation on the same branch overwrites
+  the files already at that path; never timestamp or version the directory. Embed each image
+  in the PR description under a `## Validation` heading using
+  `![caption](https://raw.githubusercontent.com/netSkope/pr-screenshots/develop/{repo}/{slug}/screenshots/<file>)`.
+  Never reference a local file path; GitHub markdown will not render it. If the shots also
+  live under `all-html/<project>/` (see **HTML Reports**), reference the same
+  `raw.githubusercontent.com` URLs there too so the report and PR share one source.
 - **Merge method**: squash merge only when merging via API.
 - Defer to project-level CLAUDE.md if it specifies different PR conventions.
 

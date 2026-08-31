@@ -62,12 +62,20 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Reload the Claude Code session (registry doesn't hot-load new
-      `.claude/agents/*.md` / relocated skills mid-session — same limitation the
-      original change hit).
-- [ ] 5.2 From a session with cwd outside `webui`, invoke
+- [x] 5.1 Confirmed the reload requirement directly (not assumed): merged +
+      pushed to `main`, ran `/reload-skills` — skill hot-loaded (`graphify-webui`
+      appeared in the available list with no restart), but invoking
+      `Agent({subagent_type: "webui-angular-agent"/"webui-php-agent"})`
+      immediately after still returned "Agent type not found" against the live
+      registry. Confirms agents need a full session restart, skills don't — same
+      split the original change's tasks.md 3.3/4.2 hit. **Still blocked on an
+      actual session restart** to complete 5.2/5.3.
+- [ ] 5.2 From a session with cwd outside `webui` (post session-restart), invoke
       `/graphify-webui "<a real webui architecture question>"` and confirm both
-      relocated domain agents dispatch and answer correctly.
+      relocated domain agents dispatch and answer correctly. First live attempt
+      (pre-restart) correctly soft-failed per the skill's own Step 3 fallback
+      instruction rather than crashing — worth re-confirming post-restart that it
+      dispatches for real instead of just falling through.
 - [ ] 5.3 Re-run the never-live-tested failure-surfacing check (original tasks.md
       6.2): temporarily make the `graphify` binary unavailable to the relocated
       `webui-php-agent` and confirm it reports the failure explicitly rather than

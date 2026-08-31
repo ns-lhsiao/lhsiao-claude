@@ -11,6 +11,11 @@
 - **Customer-reported `affectsVersion` is observation-time, not introduction-time.** Tickets default to "the version where QA noticed it"; that may be years after the bug shipped. Before calling something a regression, pickaxe the defective code path AND verify the bug is byte-identical on `develop`, the prior `Release<N-1>`, and `Release<N>`. If identical across all three, it's pre-existing debt re-surfaced — flag the delta on the ticket. Repro: ENG-1031514 (reported affectsVersion 132.0.0; bug actually shipped with LBS column default in 2019, byte-identical on develop / Release132 / Release137 / Release138).
 - **Pickaxe by symbol AND literal — strings get renamed.** `git log -S '<literal>'` misses commits where the literal was edited. ENG-1031514: writer's `notes` parameter changed `'added from app_info'` → `'default ssl pinned app'` in ENG-614741 (2025-04-08); customer rows seeded earlier still carry the old literal, but pickaxe on the new literal hides the writer's full history. Trace by function name (`addNewFromAppInfoToTenantDb`) plus a stable structural marker (the SQL skeleton, table name) and corroborate.
 
+## Bash Tool: Shell State & cwd Persistence
+
+- **`source <file>` in one Bash call does NOT carry into a later, separate Bash call** — only cwd persists across calls, not shell variables. Symptom: `source .env` in call N, then `"$NS_TEST_USERNAME"` in call N+1 silently expanded to empty string (no error) inside a `playwright-cli fill` command. Fix: `source <file> && <command using $VAR>` combined in the SAME Bash invocation.
+- **cwd persistence can silently fail for directories outside the session's normal working-tree roots** (e.g. an ad-hoc `git clone` under `/tmp`) — tool reported "Shell cwd was reset to <original dir>" after every command run there. Fix: always `cd <dir> && <command>` combined in one call when operating in a throwaway/external directory; don't rely on a prior `cd` sticking. Confirmed 2026-08-31 (ENG-1180724, pushing screenshots to a `/tmp` clone of `netSkope/pr-screenshots`).
+
 ## RTK Proxy
 
 - **RTK hook swallows grep output in some contexts.** Bare `grep` via the shell hook shows `"X matches in 0 files: [+N more]"` with no actual content. Fix: prefix with `rtk proxy` — e.g. `rtk proxy grep -n "pattern" file.php`. Same applies to other commands whose output RTK filters but shouldn't.

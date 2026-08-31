@@ -49,6 +49,13 @@ Gather:
 Invoke **`/opsx:explore`** with the bug context. This is the single collaborative
 checkpoint; do not skip it. Explore mode is thinking-only — no code written here.
 
+**If the affected area is in the `webui` repo** (paths under `src/webui/...`), invoke
+`/graphify-webui "<bug context>"` FIRST, before any manual Grep/Glob tracing — it queries
+the persistent Angular/PHP knowledge graphs for graph-grounded orientation (existing
+components/controllers/services touching the area, call relationships) and is cheaper than
+cold-grepping the tree. Use its answer to seed the root-cause hypothesis below, then
+confirm/refine with direct Read (graph may be up to 7 days stale — verify anything load-bearing).
+
 Drive the exploration to lock down, WITH the user:
 
 1. **Root cause** — trace the code path (`Grep`/`Glob`/`Read`), check recent changes

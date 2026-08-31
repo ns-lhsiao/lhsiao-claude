@@ -164,8 +164,9 @@ If root cause is unclear, say so explicitly. State what was ruled out and what a
 
 Ask the user (single message, brief):
 
+- **Update the Jira ticket** — hand off to the `issue-root-causing` agent. Pass it the structured findings (ticket key, defective surfaces with file:line, introducing commits, first-shipping releases, suggested fix, verbatim symptom string). That agent re-verifies each claim, presents an update summary, and only patches `versions` / `customfield_11701` (Root Cause Analysis) / `customfield_12500` (Fix Description) after the user confirms. The triage agent does not write to Jira directly.
 - **Fix it now** — agent escalates the user to `/boot-bugfix` or the manual worktree → fix → commit → PR flow. The triage agent does not implement.
-- **File / update a ticket** — invoke `/jira-ticket-creator` for a new ticket, or surface the affectsVersion delta as a ticket comment.
+- **File / update a different ticket** — invoke `/jira-ticket-creator` for a new ticket, or surface the affectsVersion delta as a ticket comment.
 - **Document to Confluence** — invoke `/confluence-updater` to publish under the troubleshooting folder (`https://netskope.atlassian.net/wiki/spaces/~712020f420f5c3a46f4564a0597ec1ac2bfb78/folder/7508558363`). Page title = ticket key. Update existing page if present rather than create a new one.
 - **Just the analysis** — stop here.
 

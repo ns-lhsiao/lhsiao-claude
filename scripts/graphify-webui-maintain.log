@@ -1,0 +1,29 @@
+From github.com:netSkope/webui
+ * [new branch]            bugfix/ENG-662152-emailoutbound -> origin/bugfix/ENG-662152-emailoutbound
+ * [new branch]            bugfix/ENG-703057/eb-rtp -> origin/bugfix/ENG-703057/eb-rtp
+ * [new branch]            bugfix/ENG-705101 -> origin/bugfix/ENG-705101
+ * [new branch]            bugfix/ENG-998505/Internal_Domain_UI -> origin/bugfix/ENG-998505/Internal_Domain_UI
+ * [new branch]            bugfix/rtp-row-drag-drop -> origin/bugfix/rtp-row-drag-drop
+ * [new branch]            doublecommit/ENG-965900/balkan-shell -> origin/doublecommit/ENG-965900/balkan-shell
+Current branch dev-graphify is up to date.
+[graphify extract] incremental scan of /Users/lhsiao/ns/git/webui-dev-graphify/src/webui/neo/src/app
+[graphify extract] --code-only: skipping 1 non-code file(s) (1 docs, 0 papers, 0 images) — no LLM extraction
+[graphify extract] 0 code, 0 docs, 0 papers, 0 images changed; 6767 unchanged; 0 deleted
+[graphify extract] 1229 file(s) not classified (no supported extension or shebang), skipped: about-tab.component.less, access-method-criteria-picker.component.less, access-method-ssl-criteria-picker.component.less, access-methods.component.less, access-proxy-picker.component.less, accessed-hosts-map.component.less (+1223 more)
+[graphify extract] no incremental changes detected (--no-cluster); outputs left untouched.
+2026-08-29T23:47:16+08:00 [/Users/lhsiao/ns/git/webui-dev-graphify] OK: rebased onto origin/develop and refreshed graph.json
+2026-08-29T23:47:25+08:00 [/Users/lhsiao/ns/git/webui-php-graphify] ABORT: dirty tree, skipping rebase+refresh (never auto-stashing)
+From github.com:netSkope/webui
+ * [new branch]            bugfix/ENG-662152-emailoutbound -> origin/bugfix/ENG-662152-emailoutbound
+ * [new branch]            bugfix/ENG-703057/eb-rtp -> origin/bugfix/ENG-703057/eb-rtp
+ * [new branch]            bugfix/ENG-705101 -> origin/bugfix/ENG-705101
+ * [new branch]            bugfix/ENG-998505/Internal_Domain_UI -> origin/bugfix/ENG-998505/Internal_Domain_UI
+ * [new branch]            bugfix/rtp-row-drag-drop -> origin/bugfix/rtp-row-drag-drop
+ * [new branch]            doublecommit/ENG-965900/balkan-shell -> origin/doublecommit/ENG-965900/balkan-shell
+Current branch php-graphify is up to date.
+[graphify extract] incremental scan of /Users/lhsiao/ns/git/webui-php-graphify/src/webui/system_framework/application
+[graphify extract] --code-only: skipping 289 non-code file(s) (289 docs, 0 papers, 0 images) — no LLM extraction
+[graphify extract] 0 code, 0 docs, 0 papers, 0 images changed; 2541 unchanged; 0 deleted
+[graphify extract] 11 file(s) not classified (no supported extension or shebang), skipped: .htaccess, .php_cs, Makefile, RobotoCondensed-Regular.ttf, phpunit.xml.dist, robotocondensed.ctg.z (+5 more)
+[graphify extract] no incremental changes detected (--no-cluster); outputs left untouched.
+2026-08-29T23:47:39+08:00 [/Users/lhsiao/ns/git/webui-php-graphify] OK: rebased onto origin/develop and refreshed graph.json

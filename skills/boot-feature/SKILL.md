@@ -63,7 +63,13 @@ Invoke `/start-task` with the Jira ticket key. This creates the branch and works
 
 Run the three steps below in sequence without stopping for user confirmation between them:
 
-1. **Explore**: Invoke `/opsx:explore "<short feature description derived from the Jira summary>"`.
+1. **Explore**: If this is a `webui` repo change (paths under `src/webui/...`), invoke
+   `/graphify-webui "<short feature description derived from the Jira summary>"` FIRST for
+   graph-grounded orientation (existing Angular/PHP touchpoints, call relationships) before
+   any manual Grep/Glob — cheaper than cold-grepping the tree, and feeds directly into the
+   scope/integration-points below (graph may be up to 7 days stale — verify anything
+   load-bearing with a direct Read).
+   Then invoke `/opsx:explore "<short feature description derived from the Jira summary>"`.
    - Investigate the codebase, map integration points, and define feature scope and
      implementation approach.
    - Check whether the worktree root contains an `openspec/` directory.
@@ -128,10 +134,13 @@ Remind the user they can run `/finish-up <pr#>` once reviews and CI are green.
    SLUG=<derived from description>
    BRANCH="${GH_USER}/${SLUG}"
    ```
-2. **Scope + plan**: if the worktree has `openspec/`, run `/opsx:explore "<description>"`,
-   then `/opsx:ff "<change name>"`, then `/opsx:apply "<change name>"` in sequence
-   without pausing for confirmation between steps. Otherwise ask whether to run
-   `openspec init` or skip OpenSpec entirely.
+2. **Scope + plan**: if this is a `webui` repo change (paths under `src/webui/...`),
+   invoke `/graphify-webui "<description>"` first for graph-grounded orientation before
+   any manual Grep/Glob (graph may be up to 7 days stale — verify anything load-bearing
+   with a direct Read). Then, if the worktree has `openspec/`, run
+   `/opsx:explore "<description>"`, then `/opsx:ff "<change name>"`, then
+   `/opsx:apply "<change name>"` in sequence without pausing for confirmation between
+   steps. Otherwise ask whether to run `openspec init` or skip OpenSpec entirely.
 3. Fix tests and lint after apply completes.
 4. Commit with Conventional Commits style (no Jira prefix).
 5. Open PR via `/github-pr-creator`.

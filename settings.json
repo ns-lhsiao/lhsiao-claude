@@ -1,16 +1,70 @@
 {
-  "awsAuthRefresh": "aws sso login --profile NSBedrockViewer-242201274356",
+  "awsAuthRefresh": "aws sso login --profile NSBedrockUser-889050210087",
   "env": {
-    "AWS_PROFILE": "NSBedrockViewer-242201274356",
+    "AWS_PROFILE": "NSBedrockUser-889050210087",
     "CLAUDE_CODE_USE_BEDROCK": "1",
     "AWS_REGION": "us-east-1",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "ENABLE_LSP_TOOL": "1"
+    "ENABLE_LSP_TOOL": "1",
+    "CC_CALLBACKS_LLAMA_BASE": "http://127.0.0.1:18080",
+    "CC_CALLBACKS_S3_BUCKET": "shuttle-token-profiler",
+    "CC_CALLBACKS_S3_REGION": "us-west-2",
+    "CC_CALLBACKS_S3_ROLE_ARN": "arn:aws:iam::236608207045:role/application_role/shuttle-token-profiler-telemetry-writer",
+    "CC_CALLBACKS_UPLOAD_MODE": "assume_role",
+    "CC_CALLBACKS_AWS_PROFILE": "NSBedrockUser-889050210087",
+    "CC_CALLBACKS_AWS_AUTH_REFRESH": "aws sso login --sso-session NSBedrockUser-889050210087",
+    "AWS_CA_BUNDLE": "/Users/lhsiao/netskope-combined-ca-bundle.pem",
+    "NODE_EXTRA_CA_CERTS": "/Users/lhsiao/netskope-combined-ca-bundle.pem",
+    "REQUESTS_CA_BUNDLE": "/Users/lhsiao/netskope-combined-ca-bundle.pem",
+    "SSL_CERT_FILE": "/Users/lhsiao/netskope-combined-ca-bundle.pem"
   },
-  "model": "us.anthropic.claude-opus-4-6-v1",
+  "model": "us.anthropic.claude-sonnet-5",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/lhsiao/.nvm/versions/node/v20.19.2/bin/node\" \"/Users/lhsiao/.claude/hooks/caveman-activate.js\"",
+            "timeout": 5,
+            "statusMessage": "Loading caveman mode..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/Users/lhsiao/.nvm/versions/node/v20.19.2/bin/node\" \"/Users/lhsiao/.claude/hooks/caveman-mode-tracker.js\"",
+            "timeout": 5,
+            "statusMessage": "Tracking caveman mode..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      }
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "~/.claude/scripts/pr-statusline.sh"
+  },
+  "enabledPlugins": {
+    "wb@webui-balkan-claude-plugin": true,
+    "caveman@caveman": true,
+    "cc-callbacks@shuttle": true,
+    "eli5@claude-community": true
   },
   "extraKnownMarketplaces": {
     "netskope": {
@@ -18,23 +72,41 @@
         "source": "github",
         "repo": "netSkope/claude-skills"
       }
+    },
+    "webui-balkan-claude-plugin": {
+      "source": {
+        "source": "github",
+        "repo": "netSkope/webui-balkan-claude-plugin"
+      },
+      "autoUpdate": true
+    },
+    "webui-claude-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "netSkope/webui-claude-marketplace"
+      }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "shuttle": {
+      "source": {
+        "source": "git",
+        "url": "git@github.com:netskope/cc-callbacks.git",
+        "ref": "v0.1.4"
+      }
+    },
+    "claude-community": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-community"
+      }
     }
   },
-  "skipDangerousModePermissionPrompt": true,
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/compact-nudge.py"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/daily-cost-alert.py"
-          }
-        ]
-      }
-    ]
-  }
+  "effortLevel": "high",
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true
 }

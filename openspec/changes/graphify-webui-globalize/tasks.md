@@ -68,18 +68,43 @@
       `Agent({subagent_type: "webui-angular-agent"/"webui-php-agent"})`
       immediately after still returned "Agent type not found" against the live
       registry. Confirms agents need a full session restart, skills don't — same
-      split the original change's tasks.md 3.3/4.2 hit. **Still blocked on an
-      actual session restart** to complete 5.2/5.3.
-- [ ] 5.2 From a session with cwd outside `webui` (post session-restart), invoke
-      `/graphify-webui "<a real webui architecture question>"` and confirm both
-      relocated domain agents dispatch and answer correctly. First live attempt
-      (pre-restart) correctly soft-failed per the skill's own Step 3 fallback
-      instruction rather than crashing — worth re-confirming post-restart that it
-      dispatches for real instead of just falling through.
-- [ ] 5.3 Re-run the never-live-tested failure-surfacing check (original tasks.md
-      6.2): temporarily make the `graphify` binary unavailable to the relocated
-      `webui-php-agent` and confirm it reports the failure explicitly rather than
-      fabricating an answer.
+      split the original change's tasks.md 3.3/4.2 hit. **Turned out not to be a
+      hard block**: a few turns later (5.2), the registry had picked up both
+      relocated agents on its own without any restart — the split is a lag, not
+      a permanent limitation.
+- [x] 5.2 Confirmed live from this session (cwd `nplan6460`, outside `webui`) —
+      no restart needed after all, the agent registry picked up the relocated
+      `webui-angular-agent`/`webui-php-agent` on its own (lag after the merge,
+      not a hard block; skills hot-load faster than agents but both do
+      eventually). Dispatched both in parallel for "How does the RTP inline
+      policy page load its data, and what PHP model backs it?" — both returned
+      real, graph-grounded answers with file:line citations (Angular:
+      `InlinePolicyPageComponent.fetchTableData()` →
+      `InlinePolicyService.getAllPolicies()`; PHP:
+      `Inline_policies::getPoliciesInternal()` →
+      `Inline_policies_model.readAll()`), not fabricated or fallback text. The
+      Angular agent correctly noted its graph doesn't cover PHP and verified that
+      side directly against source instead of guessing — matches the
+      failure/scope-honesty behavior this capability requires.
+- [x] 5.3 Re-ran the never-live-tested failure-surfacing check (original
+      tasks.md 6.2) against the relocated `webui-php-agent` — avoided touching
+      the shared global `graphify` binary or any shared graph file (other
+      sessions and the weekly `launchd` job depend on both); instead used two
+      self-contained probes. First attempt (a bogus CLI flag) turned out not to
+      induce a real failure — `graphify` silently ignores unknown flags and
+      exits 0 — which itself is a useful finding (noted below) but not the
+      target scenario. Second attempt: created a scratch corrupt-JSON file at
+      `/tmp/`, confirmed ground truth myself first (`graphify query --graph
+      <corrupt>` → exit 1, `error: could not load graph: Expecting property
+      name enclosed in double quotes...`), then had the agent run the identical
+      command. Agent reported exit 1 and the exact same stderr verbatim, stated
+      explicitly it would report the failure to a caller rather than guess from
+      general PHP/webui knowledge, and did not silently fall back to its own
+      pinned graph path. Matches the Requirement exactly. Scratch file removed
+      after the test.
+      **Side finding** (not a blocker, worth knowing): `graphify`'s CLI silently
+      accepts and ignores unrecognized flags instead of erroring — a typo'd flag
+      in any future agent instruction update would fail silently, not loudly.
 - [x] 5.4 Confirmed `webui-dev-graphify` and `webui-php-graphify` worktrees are
       otherwise untouched (only the new `GRAPHIFY.md` added, and the earlier
       `CLAUDE.md` mistake fully reverted) — `git status --short` in each shows

@@ -65,6 +65,8 @@ mcp.json
 !skills/boot-playwright/**
 !skills/review-pr/
 !skills/review-pr/**
+!skills/graphify-webui/
+!skills/graphify-webui/**
 
 # Knowledge index files
 !knowledge/
@@ -81,6 +83,10 @@ mcp.json
 # Agents (custom subagent definitions)
 !agents/
 !agents/**
+
+# OpenSpec (proposal/design/tasks/specs for personal-tooling changes)
+!openspec/
+!openspec/**
 
 # Explicitly ignore ephemeral/sensitive directories
 backups/

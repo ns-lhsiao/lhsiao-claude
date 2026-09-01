@@ -67,6 +67,8 @@ mcp.json
 !skills/review-pr/**
 !skills/graphify-webui/
 !skills/graphify-webui/**
+!skills/mockup-api-mapping/
+!skills/mockup-api-mapping/**
 
 # Knowledge index files
 !knowledge/

@@ -260,3 +260,16 @@ Read @LEARNINGS.md
 # graphify
 - **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+# mockup-api-mapping
+- **mockup-api-mapping** (`~/.claude/skills/mockup-api-mapping/SKILL.md`) - annotate a UI mockup
+  screenshot (Figma frame, Confluence-attached prototype image, or live-tenant Playwright capture)
+  against the real API spec (OpenAPI/Swagger, usually embedded inline in a Confluence
+  `swagger-open-api-macro` CDATA block — no GitHub access needed for that case). Produces numbered
+  green (confirmed)/red (gap) markers on the screenshot plus a cited legend table, in the
+  `all-html/<project>/figma-vs-spec-*.html` dark-theme report style. Reusable helper:
+  `~/.claude/skills/mockup-api-mapping/scripts/annotate.py` (`mark_points()`).
+  Trigger: "annotate this mockup against the API spec", "figma vs API mapping report", "UI mockup
+  API field mapping", "screenshot spec diff", or any request to check a design mockup's fields
+  against a backend schema.
+When a task matches this trigger, use the installed mockup-api-mapping skill before doing anything else.

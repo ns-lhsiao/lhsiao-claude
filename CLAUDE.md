@@ -81,12 +81,10 @@ Read @LEARNINGS.md
 ## Topic Branches
 
 - Defer to project-level CLAUDE.md for branch naming conventions when they exist.
-- If no project-level convention is specified, use: `<github_username>/<ticket>-<slug>`.
-- Use the authenticated user's **GitHub username** (obtain via `gh api user --jq .login`),
-  never their display name or real name.
-- `<ticket>` is the issue or ticket number. For Jira tickets use the project-prefixed key
-  (e.g., `ENG-1234`). Omit the ticket segment and its trailing hyphen if no ticket exists.
-- `<slug>` is a short kebab-case descriptor of the change.
+- If no project-level convention is specified, use: `pr/<TICKET-KEY>/kebab-case-summary`
+  when a ticket exists, or `pr/kebab-case-summary` when no ticket exists.
+- `<TICKET-KEY>` is the project-prefixed Jira key (e.g., `ENG-1234`).
+- `kebab-case-summary` is 5-6 words from the change description, lowercase, hyphens only.
 
 ## Git Commits
 

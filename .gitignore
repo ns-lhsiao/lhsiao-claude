@@ -69,6 +69,26 @@ mcp.json
 !skills/graphify-webui/**
 !skills/mockup-api-mapping/
 !skills/mockup-api-mapping/**
+!skills/cdp-sidecar-screenshots/
+!skills/cdp-sidecar-screenshots/**
+!skills/docshare-publish/
+!skills/docshare-publish/**
+!skills/drone-query/
+!skills/drone-query/**
+!skills/fedramp-preprod-kubeconfig/
+!skills/fedramp-preprod-kubeconfig/**
+!skills/fedramp-preprod-one-button-webui/
+!skills/fedramp-preprod-one-button-webui/**
+!skills/qa01-parallel-namespace-deploy/
+!skills/qa01-parallel-namespace-deploy/**
+!skills/qa01-parallel-namespace-routing/
+!skills/qa01-parallel-namespace-routing/**
+!skills/sumo-cost-audit/
+!skills/sumo-cost-audit/**
+!skills/sync-claude-opencode/
+!skills/sync-claude-opencode/**
+!skills/webui-flag-cli/
+!skills/webui-flag-cli/**
 
 # Knowledge index files
 !knowledge/

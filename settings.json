@@ -53,6 +53,17 @@
             "command": "rtk hook claude"
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/scripts/markitdown-read-hook.sh",
+            "timeout": 60,
+            "statusMessage": "Converting to Markdown with markitdown..."
+          }
+        ]
       }
     ]
   },
@@ -64,7 +75,8 @@
     "wb@webui-balkan-claude-plugin": true,
     "caveman@caveman": true,
     "cc-callbacks@shuttle": true,
-    "eli5@claude-community": true
+    "eli5@claude-community": true,
+    "webui-insights@webui-claude-marketplace": true
   },
   "extraKnownMarketplaces": {
     "netskope": {

@@ -27,3 +27,38 @@
 - **mf-client is a separate git repo** inside `netskope-ng-base/frontends/mf-client`. Always `cd` in and `git remote -v` before running git/gh commands. Release branches exist on the mf-client remote, not the parent.
 - **Investigate on the deployed branch**, not the primary checkout. For env-specific bugs, confirm which branch is deployed (e.g. mf-client `staging` → qa01) and analyze code via `git show <branch>:<file>`.
 - **`git add <one-file>` still commits whatever else is ALREADY staged in the index.** `git add` only adds; it never scopes the following `git commit` to just what you added. Stray pre-staged files from unrelated earlier work (a different session, a half-finished `git add -A`) ride along silently — `git commit -m "..."` after `git add web/scripts/foo.sh` committed 4 unrelated pre-staged files alongside it in `devbox-ui` (2026-08-28). Always check `git show --stat HEAD` (or `git status` before the add) — not just the diff of the file you intended — and if extras snuck in, `git reset --soft HEAD~1` + explicit `git reset HEAD -- <unwanted files>` before recommitting, rather than trusting a single `git add <file>` to have scoped it.
+
+## zsh eats `$var:path` in `git cat-file -p $b:src/...` (2026-09-07)
+- `for b in Release126 ...; do git cat-file -p origin/$b:src/webui/.../File.php; done` silently
+  returned EMPTY for every branch, making a defect look "absent on all releases". Root cause is
+  **zsh history/parameter modifiers**: `$b:s...` is parsed as the `:s` (substitute) modifier applied
+  to `$b`, with the next char as the delimiter — the rev:path string is mangled before git sees it.
+  `git show`, `git cat-file`, and `git grep` are all affected. `rtk proxy` does NOT fix it (same shell
+  parsing) — don't blame rtk.
+- Correct forms: brace the variable (`git cat-file -p "origin/${b}:src/..."`) or build the whole
+  rev:path into one variable first (`p="origin/${b}:path"; git cat-file -p "$p"`).
+- Tell: a single hand-typed literal invocation works, the loop version returns 0 hits/0 lines.
+
+## mf-client `master` history is release-squash granular — pickaxe + `--is-ancestor` both mislead (2026-09-14)
+- `git log --reverse -S '<marker>' origin/master -- <path>` on **mf-client** returns commits titled
+  `Release: 202510.3 (R131) (#655)` / `Release/202603.4 (#990)` — the squash of a whole release branch
+  into master, NOT the per-ticket commit that introduced the code. Author/date are the release
+  manager's, not the real author's. Do not report these as "the introducing commit"; report them as
+  "first master-side appearance" and name the release.
+- Worse, the standard first-shipping-release walk **silently returns nothing**:
+  `git merge-base --is-ancestor <sha> origin/release/YYYYMM.N` is false for *every* branch, because
+  the release branch is the **source** and master the **destination** — the master-side squash is not
+  an ancestor of the release branch it came from. An empty walk here is a false negative, not
+  evidence the code is unreleased.
+- Correct method for mf-client: **content-probe each release branch** in version order and take the
+  first hit —
+  `for b in "${BRANCHES[@]}"; do git grep -c '<marker>' "$b" -- <path>; done`
+  (pass the rev as its own arg with `--` before the path; avoids the zsh `$b:path` modifier trap above).
+  Bracket the answer by confirming the immediately-preceding branch has 0 hits.
+- **Two parallel release-branch naming schemes coexist** on mf-client, both needed:
+  `release/YYYYMM.N` (monthly train, e.g. `release/202608.2`) and `release/<R>.MM.DD-N`
+  (R-number cut, e.g. `release/140.08.24-0`, `release/141.09.01-0`). Build the ordered list from
+  `git branch -r` with `sort -V` and include both. Map between them via the R-number in release
+  squash subjects (`Release 133 (202512.2)`, `Release: 202510.3 (R131)`) and the `<R>.MM.DD` branch
+  names: R131=202510, R133=202512, R135=202603, R140=202608.
+- There is **no `develop`** on mf-client — only `master` plus release branches. Don't look for one.

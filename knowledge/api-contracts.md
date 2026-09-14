@@ -25,3 +25,16 @@
 - **Confluence page fetch by ID**: `GET /wiki/api/v2/pages/<id>?body-format=storage` with the Basic header above. The `/wiki/rest/api/content/<id>?expand=body.storage` v1 path also works.
 - **`~/.claude/mcp.json` contains plaintext tokens** — never commit. The config repo's `.gitignore` excludes it.
 - **`PAYLOAD=$(python3 -c '...json.dumps...'); echo "$PAYLOAD" > file.json` corrupts multi-line JSON in zsh.** zsh's builtin `echo` interprets backslash escapes by default (unlike bash) — every literal `\n` inside the JSON string gets turned into a *real* newline byte, producing invalid JSON (raw control char inside a string). Symptom here: `curl -X PUT` on a Jira `description` field returned `204` (looked successful) but the stored text had all newlines silently collapsed — lines ran together with no separator at all, because Jira's parser tolerated/dropped the bad control chars. Fix: never round-trip JSON through `echo` in this shell. Build the payload in one `python3 -c` that writes the file directly (`json.dump(payload, open(path,'w'))`), or use `printf '%s' "$PAYLOAD" > file.json` (printf does not do escape interpretation the way zsh `echo` does). Always sanity-check with `python3 -c "import json; json.load(open(path))"` before curling.
+
+## Save Jira attachments with their real file extension BEFORE `Read` (2026-09-14)
+- Downloading a ticket attachment via
+  `curl -u "$EMAIL:$TOKEN" -L "<attachment content URL>" -o /tmp/x/5148232.img`
+  and then `Read`-ing it made Read treat the JPEG/PNG as **text** and dump ~44k tokens of binary
+  garbage into context (truncated mid-file). Read dispatches on **file extension**, not sniffed
+  content type.
+- Fix: derive the extension from the attachment's `filename` / `mimeType` in the issue JSON
+  (`.fields.attachment[] | {filename, mimeType, content}`) and save as `.png`/`.jpg`/`.pdf`.
+  If already saved wrong, `mv foo.img foo.png` then Read — no re-download needed.
+- Ticket screenshots are often the decisive evidence (a DevTools network capture on ENG-1277661
+  contained the exact API response body that confirmed root cause), so this path is worth getting
+  right the first time rather than avoiding.

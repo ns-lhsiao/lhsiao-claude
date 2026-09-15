@@ -18,6 +18,7 @@ Topical reference. Each entry links to a knowledge file.
 - [Infra: Nginx, K8s, GH Actions](knowledge/infra.md) — ngweb_mf fallback, auth_request masquerade, local action refs
 - [Process & tooling](knowledge/process.md) — debugging discipline, caveman comments, RTK proxy, opsx commands
 - [vanguard (netskope-qe/vanguard E2E)](knowledge/vanguard.md) — uv sync extras, KB batch-mode branch strategy
+- [webui validation advice (boot-bugfix/boot-feature)](knowledge/webui-advise.md) — split evidence by side: Playwright screenshots for Angular/React, curl req/resp + CSRF mark-out/revert for PHP
 
 ## Multi-file `git diff HEAD -- $VAR` returns 0 lines in zsh (2026-09-05)
 - `git diff HEAD -- $FILES` where `$FILES="a b c"` (unquoted var holding space-separated

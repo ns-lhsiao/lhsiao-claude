@@ -88,7 +88,12 @@ Run the three steps below in sequence without stopping for user confirmation bet
 Run tests and lint after `/opsx:apply` completes (detect from `Makefile`, `go.mod`,
 `package.json`, etc.). Fix failures before proceeding.
 
-### Step 3.5: Playwright Validation (UI features only)
+### Step 3.5: Validation Evidence (webui scope)
+
+**If this feature's scope is in `webui` (`src/webui/...`), read
+`~/.claude/knowledge/webui-advise.md` first** — it splits validation evidence by
+side: Playwright screenshots for Angular/React, curl request/response evidence
+(with the CSRF mark-out/revert procedure) for PHP.
 
 After implementation, validate the changed UI flow end-to-end. Delegate to
 **`/boot-playwright <recipe> <slug>`** — do NOT hand-roll dev-env bootstrap or raw

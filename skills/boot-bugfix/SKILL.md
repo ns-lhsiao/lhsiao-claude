@@ -120,6 +120,11 @@ failure to the human — do NOT proceed to report, archive, or PR.
 
 ## PHASE 5: Browser Validation (UI changes only) — autonomous
 
+**If the fix scope is in `webui` (`src/webui/...`), read `~/.claude/knowledge/webui-advise.md`
+first** — it splits validation evidence by side: Playwright screenshots for
+Angular/React, curl request/response evidence (with the CSRF mark-out/revert
+procedure) for PHP.
+
 **Gate:** run only if the fix touches UI files (mf-client under
 `netskope-ng-base/frontends/mf-client/`, mf-cfw under `mf-cfw/`, or webui2 under
 `apps/`/`packages/`). Non-UI fixes skip this phase and rely on Phase 4 tests.
@@ -161,7 +166,8 @@ bug/repo), per global CLAUDE.md. The report MUST include:
   change name, `git diff` summary.
 - **Validation detail**: the Phase 2 criteria, unit/coverage results (new-code %), and
   for UI fixes the numbered Playwright plan with per-step PASS/FAIL and embedded/linked
-  screenshots (`/tmp/bugfix-step-N.png`).
+  screenshots (`/tmp/bugfix-step-N.png`). For webui PHP fixes, include the full curl
+  request/response evidence per `~/.claude/knowledge/webui-advise.md`.
 
 Then update `/Users/lhsiao/ns/git/all-html/index.html` in the SAME turn: add a `<li>`
 under the matching `<project>` `<h2>` (create the group if new), bump its `(N)` count,

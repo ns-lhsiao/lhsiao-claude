@@ -12,6 +12,7 @@
 - **`git show <branch>:<file> > /tmp/out` can silently produce a 0-byte file** under the RTK shell hook (the rewrite mangles the redirect target). Symptom: `wc -l /tmp/out` shows 0 while the same `git show` piped works. Fix: use process substitution for cross-branch file compares — `diff <(git show origin/A:path) <(git show origin/B:path)` — instead of writing temp files. Confirmed 2026-07 during ENG-1127021 triage.
 - **`git show "$B:$P"` inside a bash `for` loop gets its revspec CORRUPTED by the RTK hook** when `$B`/`$P` are shell variables. Symptom: `fatal: ambiguous argument 'origin/Release138k/application/models/Foo.php'` — the hook's rewrite ate a chunk of the path mid-string (`src/webui/system_framewor` vanished, leaving a stray `k`). The bare-`$B`-interpolated form `git show $B:src/...` fails the same way. Fix: prefix the whole thing with `rtk proxy` — `n=$(rtk proxy git show "$B:$P" | grep -c pattern)` — which bypasses the rewrite and returns correct counts. Also note `git log --reverse -S '<literal>' -- <path>` returns EMPTY under the hook but works under `rtk proxy`; a silent-empty pickaxe reads as "never introduced" and will fabricate a wrong origin trace. Always `rtk proxy` pickaxe and cross-branch `git show`. Confirmed 2026-07 during ENG-1133971 triage.
 
+- **Root cause of the `$B:$P` corruption is zsh, not only RTK — and there is a pure-quoting fix.** `git show "$r:src/webui/neo/src/app/components/nav-bar/navbar-config.service.ts"` in a zsh `for` loop errored `fatal: ambiguous argument 'origin/Release141/navbar-config.service.ts'` — zsh read `:s/webui/neo/...` as the **`:s/old/new/` history-substitution modifier** and rewrote the revspec, deleting the middle of the path. Any `$var:` followed by `s`, `h`, `t`, `r`, `e`, `g`, `p`, `q`, `l`, `u`, `a`, `A`, `c`, `x` can trigger it — so *most* real paths (`:src/...`, `:helpers/...`, `:test/...`) are affected. Fix without RTK: split into two separately-quoted words — `git show "${r}":"${P}"`. Confirmed 2026-09-15 during ENG-1277032 triage; with `2>/dev/null` in the loop this presents as a silent `grep -c` of `0` on **every** branch including one you know is positive.
 - **`git cat-file -p "$B:$P" | grep -c <pat>` inside a `for` loop silently returns `0` for every branch** — a *wrong answer*, not an error, so it reads as "symbol absent on all branches" and will fabricate an origin trace. Confirmed 2026-08-31 during ENG-1172829 triage: the loop reported `isCfwOsFamilyEnabled` absent on Release139/140/141 AND `origin/develop`, yet the identical `git cat-file -p "origin/Release141:<path>" | grep -c` run as its OWN standalone Bash call returned `1`. `git cat-file` is affected the same way `git show` is (see above). Fix: never loop cross-branch content reads — issue one Bash call per branch, or wrap in `rtk proxy`. Sanity-check any loop result against a branch you KNOW contains the symbol; if that control also returns 0, the loop is lying.
 - **Plain `git diff HEAD -- <files>` under the RTK hook can silently return a summarized stub** (`<file> | N ++++++++++`, `1 file changed`, `--- Changes ---`, with the second file's stat line and the actual patch body missing) instead of the real unified diff — this is RTK's token-optimized rewrite, not an error, so a downstream `grep -c '^diff --git'` check reads `0` and looks like "nothing changed" when files clearly are modified. Symptom hit while building a local-PR-review context file (vanguard repo, TC-CLIENT-176) that needs the byte-identical diff a CI reviewer would see. Fix: `rtk proxy git diff HEAD -- <files>` to get the untouched patch. Same fix family as the `git show`/`git cat-file` RTK traps above — when a git command's output needs to be machine-parsed or fed verbatim to another consumer (not just eyeballed), default to `rtk proxy` rather than trusting the hook's summary.
 
@@ -38,6 +39,30 @@
 - Correct forms: brace the variable (`git cat-file -p "origin/${b}:src/..."`) or build the whole
   rev:path into one variable first (`p="origin/${b}:path"; git cat-file -p "$p"`).
 - Tell: a single hand-typed literal invocation works, the loop version returns 0 hits/0 lines.
+
+## Never `git pull origin master` on a worktree meant for a story-specific integration branch (2026-09-15)
+- Ran `git pull --ff-only origin master` on a fresh mf-cfw worktree before confirming the epic's
+  actual PR-target integration branch (`pr/ENG-1274461/nplan-6460-main`), just to "catch up" a
+  stale worktree. `master` had ~11 unrelated commits (a whole DNS Security feature) not yet merged
+  into that integration branch. Every subsequent commit/rebase on the branch carried those 11
+  master-only commits along, so `gh pr diff <n> --name-only` showed 27 unrelated files even though
+  `git diff --stat` scoped to my own paths looked clean — the PR was polluted from the base, not
+  from my own commit.
+- `git rev-list --left-range --count <base>...<branch>` reporting "ahead N" where N is much bigger
+  than your own commit count is the tell — check `gh pr diff <n> --name-only` (what GitHub actually
+  computes against the PR's base) rather than trusting local `git diff --stat` against a possibly
+  stale local ref of the base.
+- Fix once discovered: don't try to rebase/filter the polluted branch — `git checkout -b tmp
+  origin/<real-integration-branch>` then `git cherry-pick <your-single-commit-sha>` onto the clean
+  base, then `git branch -f <original-branch-name> tmp` + `push --force-with-lease`. Much safer
+  than rebase --onto with a long unrelated commit range.
+- Root fix: identify the actual PR-target branch (check project CLAUDE.md / ask) BEFORE ever
+  running any `git pull`/`git fetch --merge` against `master`/`main` in a story worktree — only
+  ever sync against the real integration branch once it's known.
+- **Do not `git checkout <ref> -- .`** to "peek" at another branch's tree — it silently overwrites
+  every file in the working tree (including uncommitted edits) with that ref's versions, no
+  conflict/warning. Recoverable via `git checkout HEAD -- .` if nothing was committed yet, but it's
+  a destructive footgun; use `git show <ref>:<path>` or a separate worktree to inspect instead.
 
 ## mf-client `master` history is release-squash granular — pickaxe + `--is-ancestor` both mislead (2026-09-14)
 - `git log --reverse -S '<marker>' origin/master -- <path>` on **mf-client** returns commits titled

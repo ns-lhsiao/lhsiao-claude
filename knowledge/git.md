@@ -19,7 +19,7 @@
 ## Branch & Commit Conventions
 
 - **mf-client + webui branches**: `pr/ENG-XXXXXX/kebab-slug`. CI rejects the global `<user>/<ticket>-<slug>` default. See `https://nsgo.to/branchingstrategy`.
-- **mf-client + webui commits**: `ENG-XXXXXX: Subject` (project-key prefix with colon). NOT Conventional Commits. Allowed prefixes per `commitlint.config.js`: `ENG`, `NG`, `EP`.
+- **mf-client + webui + mf-cfw commits**: `ENG-XXXXXX: Subject` (project-key prefix with colon). NOT Conventional Commits — a `chore:`/`feat:` subject is rejected by the husky `commit-msg` hook (`commitlint-plugin-jira-rules`: `jira-task-id-project-key`, `-case`, `-separator`, `jira-commit-status-case`). Allowed prefixes per `commitlint.config.js`: `ENG`, `NG`, `EP`. Confirmed on mf-cfw 2026-09-16 (ENG-1266587). Assume every netSkope mf-* repo uses this until proven otherwise; check `commitlint.config.js` before the first commit.
 - **mf-client default branch is `master`** — `git fetch origin main` fails. Verify with `git remote show origin`.
 - **mf-client push target**: always `origin` (`netSkope/mf-client`), NOT a personal fork. CODEOWNERS / shared CI assume upstream-branch PRs.
 - **Check Jira fixVersion for base branch**: a fix targeting `release/202605.2` must be based on that release branch, not `master`. Wrong base pollutes the PR diff and forces a reset+cherry-pick.

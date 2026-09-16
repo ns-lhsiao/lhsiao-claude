@@ -22,3 +22,16 @@
 - **`gh pr edit <n> --body-file` fails with `your authentication token is missing required scopes [read:project]`** because `pr edit` pre-fetches project boards even when only editing the body. Do not `gh auth refresh` for it; use the REST API directly: `gh api -X PATCH repos/<org>/<repo>/pulls/<n> -F body=@/path/body.md`. `gh pr create` and `gh pr view` are unaffected. Hit 2026-09-03 (webui2 #2500).
 - **`gh search code` / `gh api search/code` can return 0 results for a string that verifiably exists in the file** — confirmed by independently fetching the file and grepping it directly. GitHub's code-search index lags/misses on some private-repo content; a 0-result code search is NOT proof of absence. When a search result contradicts other evidence (git blame, a diff you already have), re-verify via direct file fetch instead of trusting the search. Hit 2026-09-13 (netSkope/service, ENG-1074579 follow-up) — `gh search code "nplan4571_datamigrate" --repo netSkope/service` returned nothing while the literal string was directly visible in the file moments later via raw fetch.
 - **GitHub Contents API 404s on large files** (`gh api repos/O/R/contents/<path> -f ref=<branch>`) — hit this on a ~10k-line Python file well under any obvious size limit's expectation but apparently still over the Contents API's ceiling (~1MB base64-encoded). Fix: fetch via `curl -s -H "Authorization: token $(gh auth token)" "https://raw.githubusercontent.com/<org>/<repo>/<branch>/<path>"` instead — works for private repos with the `gh` token as a bearer `Authorization: token` header (no signed `?token=` query param needed, unlike the screenshot-embedding case earlier in this file — that's for anonymous/browser access, this is for authenticated API-style fetches and has no TTL issue).
+
+## `gh` CLI fails inside the Bash sandbox (2026-09-16)
+- `gh pr view/diff/api` in sandbox mode fails twice over: first
+  `deny network-outbound api.github.com:443` (host not in `allowed_domains`), then — after adding
+  `allowed_domains: ["api.github.com", ...]` — `tls: failed to verify certificate: x509: OSStatus -26276`,
+  because the sandbox's filtering proxy MITMs TLS and `gh`'s Go TLS stack doesn't trust its CA.
+- Fix: run every `gh` command with `dangerouslyDisableSandbox: true`. Adding the host to
+  `allowed_domains` alone is NOT enough.
+- Second trap: `$TMPDIR` differs between sandboxed and unsandboxed commands, so a file written by an
+  unsandboxed `gh ... > $TMPDIR/x` is invisible to a later sandboxed `cd $TMPDIR`. Write to the
+  session scratchpad path literally instead of `$TMPDIR` when mixing the two modes.
+- Third trap: `gh api "…/contents/path?ref=pr/ENG-123/foo"` — zsh globs the bare URL and errors
+  `no matches found`. Quote the whole argument or build it from a variable.

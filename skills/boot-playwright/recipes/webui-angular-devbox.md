@@ -384,6 +384,112 @@ long time to mount their guard logic):
 Confirmed end-to-end 2026-08-28 validating ENG-868849 (PR #18659,
 `Clientconfiguration::saveClientConfig`'s new group-scim-id duplicate guard).
 
+## Known issue: no real session locking → CSRF mismatch / random logout on concurrent-XHR pages
+
+Pages that fire a large burst of parallel POSTs on load or app-picker change (e.g.
+`inline-policy-page` fires ~13 concurrent requests) can produce a cascade of symptoms that all
+look unrelated but share one root cause:
+
+- `CSRF Token mismatch` / `CSRF Token missing` on nearly every POST, immediately after login
+- Random full logout mid-session (`#/logout?reason=loggedout` or `reason=timeout`) with no
+  actual idle time elapsed
+- `checkForValidSession()` logging `"A logged out user tried to access"` even right after a
+  fresh, successful login
+
+**Root cause (confirmed via `git log -S_get_lock -- .../NS_Session_memcached_driver.php`,
+2026-09-17, ENG-1287334):** `NS_Session_memcached_driver::_get_lock()`/`_release_lock()` are
+no-op stubs — `$this->_lock = TRUE; return TRUE;` — with no actual memcached CAS/mutex. This
+has been the design since the driver was created (ENG-81192, 2019), on both the Redis and
+Memcached drivers, deliberately: real per-session locking would serialize every concurrent-XHR
+request behind one lock, which is an unacceptable latency hit in production. On localhost,
+though, PHP-FPM workers race the shared memcached session blob with true last-write-wins: worker
+A rotates the CSRF hash and writes; worker B (already mid-flight on stale data) overwrites A's
+write moments later with its own stale copy — corrupting the session for whichever worker reads
+next.
+
+**Fix — DEVBOX-TEMP only, never commit.** Patch a real memcached-CAS lock into the two stub
+methods (`system_framework/application/libraries/Session/drivers/NS_Session_memcached_driver.php`):
+
+```php
+protected function _get_lock($session_id) {
+    // DEVBOX-TEMP: real memcached-CAS lock for local validation only. Revert before finishing.
+    $lock_key = $this->_key_prefix . $session_id . ':devboxtemplock';
+    for ($attempt = 0; $attempt < 150; $attempt++) {
+        if ($this->_memcached->add($lock_key, 1, 30)) {
+            $this->_lock_key = $lock_key;
+            $this->_lock = TRUE;
+            return TRUE;
+        }
+        usleep(200000);
+    }
+    return FALSE;
+}
+
+protected function _release_lock() {
+    // DEVBOX-TEMP: pair with the real lock above. Revert before finishing.
+    if (isset($this->_lock_key)) {
+        $this->_memcached->delete($this->_lock_key);
+        $this->_lock_key = NULL;
+    }
+    $this->_lock = FALSE;
+    return TRUE;
+}
+```
+
+150 attempts × 200ms (30s budget) is deliberately generous — a short budget (e.g. 30 attempts ×
+100ms = 3s) is NOT enough for ~13 serialized requests each doing real DB queries on slow devbox
+mariadb; the last-in-queue request will time out waiting for the lock and get an empty session
+(`session_id()` still resolves, but `read()` never populates `$_SESSION`), which surfaces as a
+*different*-looking failure (`CSRF Token missing`, not `mismatch`).
+
+**Two more layers can still bite even with the lock in place** — apply as needed, same
+DEVBOX-TEMP/revert discipline:
+
+1. **`isRegenerateNeeded()` still needs the existing `return false;` override** (see above) — the
+   real lock does not fix the separate Set-Cookie-not-reflecting-regenerated-id bug.
+2. **A rare no-cookie race can still occur**: 1–2 of the ~13 concurrent requests intermittently
+   arrive with `session_id()` empty (no session cookie at all — a browser/HTTP-layer fluke under
+   this many simultaneous same-origin requests, not a webui bug). `checkForValidSession()`
+   (`system_framework/application/core/NS_Controller.php`) treats that as a domain mismatch and
+   unconditionally calls `sess_destroy()`, which kills the *entire* session over one flaky
+   request. If this still logs users out after the lock fix, gate the check off too:
+   ```php
+   // DEVBOX-TEMP: domain-mismatch check disabled for local Playwright validation. Revert before finishing.
+   if (false && $this->session->userdata('domainname') != $_SERVER['HTTP_HOST']) {
+   ```
+   And if CSRF mismatches persist independently, the same-class bypass at the top of
+   `NS_Security::csrf_verify()` (`system_framework/application/core/NS_Security.php`) works too:
+   ```php
+   // DEVBOX-TEMP: bypass CSRF verification for local Playwright validation. Revert before finishing.
+   return $this;
+   ```
+
+## Gotcha: "Any Web Traffic" Destination does not exercise firewall-app-type code paths
+
+When validating anything gated on `this.data.policy_type === 'firewall'` in
+`inline-policy-form.component.ts` (e.g. `firewallAppSelected`, `toggleCriteriaForFirewall()`,
+`cleanUpExclusionData()`) — picking **"Any Web Traffic"** as the Destination type saves the
+policy as `policy_type: "any_category"`, not `"firewall"`, regardless of what `type=` the
+create-wizard URL specified. On re-edit, `firewallAppSelected` never becomes `true` for an
+`any_category` policy, so any logic gated behind it (including bugs you're trying to reproduce)
+silently never runs — data "surviving" a round-trip through this path proves nothing. To
+actually exercise the firewall code path, select a real **Cloud App** as the Destination (any
+seeded app works, e.g. search "a" and pick the first result) — that's what sets
+`this.data.policy_type = 'firewall'` on save. Confirmed 2026-09-17 (ENG-1287334) — an initial
+validation pass using "Any Web Traffic" produced a false-positive "fix confirmed" result.
+
+**Fast, deterministic way to test a component method directly** without fighting the UI for
+every click, once the component is mounted (works for confirming a fix without redoing a full
+save/reopen cycle each time):
+
+```bash
+playwright-cli -s=<slug> eval "() => { const el = document.querySelector('ns-inline-policy-form'); const comp = window.ng.getComponent(el); comp.cleanUpExclusionData(); window.ng.applyChanges(comp); return comp.data.excludedGroups; }"
+```
+
+This is the same `window.ng.getComponent()` pattern documented above for driving pickers with no
+seed data — it works equally well as a before/after oracle: run once with the buggy code built,
+once with the fix built, same live component state, and diff the return value.
+
 ## Standard headless launch
 
 ```bash

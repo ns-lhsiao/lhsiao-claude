@@ -57,3 +57,45 @@ Topical reference. Each entry links to a knowledge file.
   line/call), or (b) a zsh array (`FILES=(a b c); git diff HEAD -- $FILES[@]`) or
   `${=FILES}` (forces word-split) if a variable is required. Applies to vanguard's
   local-pr-review.md phase and any other multi-file git command built from a joined string.
+
+## rtk-wrapped git commands false-positive on the worktree isolation guard (2026-09-21)
+- Inside a worktree session (webui2-fix-bwc-source-ip-remap), plain `git status`, `git diff
+  origin/master`, and `git rev-parse` calls were refused with "this command runs rtk with a git
+  command among its operands: what runs it ... cannot be read here ... Refusing to run it." The
+  isolation checker couldn't statically verify the command stays inside the worktree once rtk's
+  hook had rewritten `git ...` into its own wrapper — the substitution happens transparently, so
+  from the checker's view the literal command "names git in a form too complex to verify."
+- Fix: bypass the rtk rewrite entirely by invoking the real binary directly — `/usr/bin/git status`,
+  `/usr/bin/git diff ...`, `/usr/bin/git commit ...` — the isolation checker can verify a direct
+  binary path trivially. Applies to any git operation inside a worktree-isolated session when rtk's
+  hook is active; `rtk proxy git ...` does NOT fix it (still routes through rtk).
+
+## pnpm workspace symlink-node_modules needs per-package dirs too, with absolute targets (2026-09-21)
+- Symlinking only the workspace-root `node_modules` from a sibling checkout (same pnpm-lock.yaml
+  hash) into a fresh worktree was not enough to run `vitest`/`oxlint`/`tsc` — pnpm workspaces also
+  materialize a separate `node_modules` inside each package (`apps/shell/node_modules`,
+  `packages/api/node_modules`, etc.) holding that package's own `.bin/` shims (e.g. `vitest`,
+  `oxlint`). Without those, `pnpm vitest run` / bare `vitest` reports "command not found" even
+  though the root symlink resolves fine.
+- Fix: symlink each package's `node_modules` individually from the same sibling checkout
+  (`ln -s /abs/path/to/other-checkout/apps/shell/node_modules apps/shell/node_modules`, one per
+  package dir). Use **absolute** paths for the symlink target — a relative target written from
+  inside a two-segment package path (`apps/shell/`) is easy to get one `../` short or long (mixing
+  up "relative to worktree root" vs "relative to the symlink's own directory"); `readlink -f`
+  showed the miscount immediately when a relative attempt was off by one level.
+
+## `openspec archive` prompts interactively even with a completed change (2026-09-21)
+- `openspec archive "<change>"` (no flags) hit a `Proceed with spec updates? (Y/n)` prompt and
+  failed outright in a non-interactive session ("User force closed the prompt"). Fix: always pass
+  `--yes` (`openspec archive "<change>" --yes`) when driving `openspec` from an agent session.
+
+## Read tool reflows large single-file HTML into a different line numbering (2026-09-21)
+- Reading a hand-built dark-theme HTML report (e.g. `all-html/index.html`, ~880 raw lines) via the
+  Read tool returned a *much shorter*, reflowed pseudo-markdown rendering (converted headings/links,
+  660 total lines) whose line numbers do NOT correspond to the real file — offsets taken from `grep
+  -n` or `sed -n` on the raw file landed on unrelated content when fed back into Read. This appears
+  specific to files the tool detects as HTML and tries to "render" rather than show verbatim.
+- Fix: for precise line-numbered inspection of a raw HTML file, use `sed -n '<range>p'` / `grep -n`
+  via Bash, not the Read tool's line numbers. The `Edit` tool's `old_string` matching still operates
+  on real on-disk content regardless of what Read displayed, so exact-string edits sourced from
+  `sed`/`grep` output remain safe even when Read's own numbering is unusable.

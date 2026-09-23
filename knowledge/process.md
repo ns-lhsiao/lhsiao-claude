@@ -65,3 +65,19 @@
 - **RTK rewrites `grep` to `rg`: BRE alternation `\|` breaks when the pattern also contains `(`.** `grep -n "foo\|bar("` becomes an rg regex with an unclosed group → `regex parse error ... unclosed group`, zero matches. Use `rg -n "foo|bar\("` (PCRE-style alternation, escape parens) or `grep -E`. Plain `\|` alternation without parens still works. Hit 2026-09-03 (webui2 ENG-1252057).
 - **Two dev servers from one Bash call both launched from the same checkout.** `cd <worktree> && (A &); (B &)` — the second launch inherits the `cd`; "Shell cwd was reset" only happens *between* tool calls. Wrap each launch in its own subshell with an explicit path: `(cd <worktree> && ... pnpm dev > /tmp/dev-after.log &)` then `(cd <primary> && ... pnpm dev > /tmp/dev-before.log &)`, and confirm per port with `lsof -p <vite pid> -a -d cwd -Fn` before screenshotting. Cost two restarts on 2026-09-03 (ENG-1252057).
 - **`openspec status --change <name>` errors `Change '<name>' not found. No changes exist.` when cwd is inside `openspec/changes/<name>/`.** The CLI resolves `openspec/` from cwd upward but not from within a change dir. Run openspec commands from the repo root. 2026-09-03.
+
+## Sandboxed Bash cannot write into a git worktree outside the session cwd (2026-09-22)
+- Session cwd was `claudeDesktop/`; the vanguard worktree lives at a sibling path under
+  `~/ns/git/`. Heredoc / python writes there failed with `Operation not permitted` because the
+  Seatbelt write allowlist is only cwd + `$TMPDIR`. Fix: run the write command with
+  `dangerouslyDisableSandbox: true` (the worktree IS the task target), or start the session from
+  the worktree directory. Reads were unaffected.
+
+## `cmd | tail -1 && next` masks the gate's exit code (2026-09-23)
+- Chained `uv run mypy src/ | tail -1 && git commit ...`: mypy found 5 errors but the pipeline's
+  status is `tail`'s (0), so the commit (and push) went through with type errors. Same trap for
+  `pytest ... | tail -1`. Discovered when a later run showed "Found 5 errors" in the transcript
+  after the push had already happened.
+- Fix: never pipe a gate command whose exit code matters. Run it bare (`uv run mypy src/ &&
+  ...`), or `set -o pipefail` first, or capture output to a file and `grep`/`tail` afterwards.
+  In zsh/bash, `cmd | tail -1` always succeeds unless `pipefail` is set.

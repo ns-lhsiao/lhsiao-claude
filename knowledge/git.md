@@ -87,3 +87,22 @@
   squash subjects (`Release 133 (202512.2)`, `Release: 202510.3 (R131)`) and the `<R>.MM.DD` branch
   names: R131=202510, R133=202512, R135=202603, R140=202608.
 - There is **no `develop`** on mf-client — only `master` plus release branches. Don't look for one.
+
+## `netskope-qe/webui-ng-api-libs` has NO release branches or tags — trace affected version via `setup.py` (2026-09-23)
+- The QE Python client library `webui_v2_apis` lives in `netskope-qe/webui-ng-api-libs` (package dir
+  `src/webui_v2_apis/`, default branch **`main`**). It is NOT part of the `webui` PHP repo, despite
+  Jira component "Web UI" and ticket text saying "repo: webui". `git branch -r` shows only feature
+  branches; `git tag` is **empty**. The standard `Release<N>` / `merge-base --is-ancestor` walk
+  returns nothing and that is a false negative, not evidence the code is unreleased.
+- Version → release mapping lives in a single `VERSION = "<release>.1"` literal in `setup.py`
+  (shipped as `<release>.1.<DRONE_BUILD_NUMBER>`), bumped once per Netskope release train:
+  121.1 = initial commit 2024-09-23 … 143.1 = 2026-09-21. So **`VERSION`'s major == the `Release<N>`
+  number**.
+- Method to map an introducing commit to its first shipping release:
+  `git show "<sha>:setup.py" | grep -m1 'VERSION = '` — quote as `"${sha}:setup.py"`, a bare
+  `$sha:setup.py` hits the zsh modifier trap. To list every bump use
+  `git log --format='%h|%ad|%s' --date=short -L 10,10:setup.py` — `-S 'VERSION = "'` only reports the
+  initial commit because the occurrence *count* never changes across bumps.
+- Consumers pin the wheel from Artifactory, so the snapshot a reporter pasted into a ticket is often
+  several releases behind `main`. Diff the ticket's quoted code against `main` before trusting its
+  line numbers or accepting a proposed patch as applying cleanly.

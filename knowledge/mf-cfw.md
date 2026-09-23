@@ -16,3 +16,8 @@
 - **Claude-in-Chrome extension cannot open `localhost`** — `navigate` returns "This site is blocked by your organization's policy". For local dev-server screenshots use Playwright instead. No Playwright package is installed in mf-cfw or globally (`npm root -g` only has `@playwright/cli`), but any webui2 worktree's `node_modules/@playwright/test` exports `chromium` and matches the cached browsers in `~/Library/Caches/ms-playwright`: `const { chromium } = require('/Users/lhsiao/ns/git/balken/<webui2-worktree>/node_modules/@playwright/test')`. Confirmed 2026-09-16.
 - **`run_in_background` + a trailing `&` inside the command** makes the Bash task report "completed" immediately while the detached `yarn start` keeps running (find it with `lsof -i :<port> -sTCP:LISTEN`, kill by PID when done). Either drop the `&` and let `run_in_background` own the process, or expect to manage the PID yourself.
 - **Playwright `page.route()` for mf-cfw standalone** must stub three endpoints before `page.goto()`: `/mf/rbac/remoteEntry.js` (return empty JS module), featureflag for `rbac_v3_feature_enabled` (return `false`), and `**/api/v2/ui/auth/authorize/pagepermissions**` (return permission fixture). Missing any causes `withAuthorization` HOC to hang on its loading state indefinitely.
+
+## Run jest via `CI=true yarn -s test <path>`, not bare `npx jest` (2026-09-23)
+- `npx jest src/...` in mf-cfw fails every RTL suite with `ReferenceError: document is not defined` —
+  the jsdom env + moduleNameMapper live in craco's jest config, not a standalone jest.config.
+  Use `CI=true yarn -s test <path>` (`craco test --watchAll=false`).

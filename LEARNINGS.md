@@ -99,3 +99,17 @@ Topical reference. Each entry links to a knowledge file.
   via Bash, not the Read tool's line numbers. The `Edit` tool's `old_string` matching still operates
   on real on-disk content regardless of what Read displayed, so exact-string edits sourced from
   `sed`/`grep` output remain safe even when Read's own numbering is unusable.
+
+## `/wb:spec:land` skill writes files on master, silently violating the global worktree mandate (2026-09-23)
+- Ran `/wb:spec:land port-client-saml-cert-rotation` from a Stop-hook prompt while on `master` in the
+  primary webui2 checkout. The skill's own steps (Step 3 copy artifacts, Step 5-7 spec.md diffs) never
+  mention worktrees, so I wrote/edited 4 files directly on `master` before noticing CLAUDE.md's global
+  "all feature work MUST be performed in a git worktree... regardless of how small" rule applies to
+  spec-landing edits too, not just application code.
+- Recovery: `git stash push -u` the in-progress edits on master, `git worktree add
+  ../<repo>-<slug> -b pr/<TICKET>/<slug>` from the primary checkout, `git stash pop` inside the new
+  worktree (stash applies cleanly regardless of which branch created it), verified master was clean
+  again, then staged/committed inside the worktree.
+- Fix going forward: before Step 3 of any `/wb:spec:land` (or any skill that writes repo files and
+  doesn't itself mention worktrees), create the worktree+branch FIRST, exactly as for any other code
+  change — the global CLAUDE.md worktree rule is unconditional and skill instructions don't override it.

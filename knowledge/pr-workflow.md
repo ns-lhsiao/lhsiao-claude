@@ -35,3 +35,8 @@
   session scratchpad path literally instead of `$TMPDIR` when mixing the two modes.
 - Third trap: `gh api "…/contents/path?ref=pr/ENG-123/foo"` — zsh globs the bare URL and errors
   `no matches found`. Quote the whole argument or build it from a variable.
+
+## `gh pr edit` fails with "missing required scopes [read:project]" (2026-09-23)
+- `gh pr edit <n> --body-file f` errored: `your authentication token is missing required scopes
+  [read:project]` — gh's edit path queries projectsV2 even when only the body changes.
+- Fix without re-auth: `gh api -X PATCH repos/<org>/<repo>/pulls/<n> -F "body=@f"`.

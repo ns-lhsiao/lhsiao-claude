@@ -113,3 +113,30 @@ Topical reference. Each entry links to a knowledge file.
 - Fix going forward: before Step 3 of any `/wb:spec:land` (or any skill that writes repo files and
   doesn't itself mention worktrees), create the worktree+branch FIRST, exactly as for any other code
   change — the global CLAUDE.md worktree rule is unconditional and skill instructions don't override it.
+
+## Symlinked apps/shell/node_modules resolves package builds from the PRIMARY checkout, not the worktree (2026-09-24)
+- In a webui2 worktree whose `apps/shell/node_modules` is symlinked to the primary checkout (`/Users/lhsiao/ns/git/balken/webui2/apps/shell/node_modules`), `pnpm --filter @ns/api build` run inside the WORKTREE builds the worktree's `packages/api` — but tsgo/vite resolve `@ns/api/*` through the symlink to the PRIMARY checkout's `packages/api/dist`, which stays stale. Symptom: `TS2307 Cannot find module '@ns/api/drm'` in shell typecheck even though the worktree's dist has the file, plus phantom `TS2589` via turbo's stale `@ns/shared-types#build` cache.
+- Fix: run the dependency package builds in the PRIMARY checkout (`cd /Users/lhsiao/ns/git/balken/webui2 && pnpm --filter @ns/shared-types build && pnpm --filter @ns/api build`) — build outputs are untracked artifacts, safe to refresh there. Then `pnpm typecheck` from the worktree goes green.
+- Rule of thumb: when a worktree symlinks `node_modules` from a sibling/primary checkout, ALL package `dist/` builds must run where the symlink points, not where you're editing. See knowledge/worktrees.md.
+
+## mf-cfw commitlint rejects conventional-commit scopes; wants `ENG-NNN: subject` (2026-09-24)
+- In mf-cfw, `git commit` with `feat(scope): subject` failed the husky commit-msg hook 4 ways:
+  `jira-task-id-case`, `jira-task-id-project-key`, `jira-task-id-max-length`,
+  `jira-commit-status-case`. `feat(ENG-1266657): ...` still failed 3 of 4 — the hook is
+  `commitlint-plugin-jira-rules` extending the `jira` preset (`commitlint.config.js`), which does
+  NOT parse conventional-commit format at all; it wants the ticket-first form used by the repo's
+  own history: `ENG-1266657: Wire View analysis mode (GET /analyze/last)` (see merged commits like
+  `ENG-1286838: Fix relation counts...`).
+- Fix: check `commitlint.config.js` for `extends: ['jira']` before composing the message — if
+  present, subject is `<TICKET>: <imperative subject>`, no `feat(...)` prefix. Global CLAUDE.md's
+  Conventional-Commits rule yields to this repo-level convention (CLAUDE.md already says defer to
+  project config; this is what that looks like in practice).
+
+## Remote branch delete after squash-merge blocked by repo ruleset (mf-cfw) (2026-09-24)
+- After PR #534 merged, `git push origin --delete pr/ENG-1266657/view-analysis-wiring` was rejected:
+  `push declined due to repository rule violations`. Not a permissions issue on the token — a
+  repo ruleset governs refs matching the branch pattern. `gh api -X DELETE repos/netSkope/mf-cfw/git/refs/heads/...`
+  would hit the same rule.
+- Impact: none on the merge itself; the merged branch is inert. finish-up's "remote: deleted"
+  summary line is unattainable in this repo — report "remote: delete blocked by repo rule (inert)"
+  instead and move on. Applies to netSkope/mf-cfw; check other repos' rulesets before assuming.

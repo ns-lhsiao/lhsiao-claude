@@ -140,3 +140,13 @@ Topical reference. Each entry links to a knowledge file.
 - Impact: none on the merge itself; the merged branch is inert. finish-up's "remote: deleted"
   summary line is unattainable in this repo — report "remote: delete blocked by repo rule (inert)"
   instead and move on. Applies to netSkope/mf-cfw; check other repos' rulesets before assuming.
+
+## `gh pr edit` fails on missing `read:project` scope (2026-09-24)
+- `gh pr edit <n> --repo netSkope/ursa` failed: `your authentication token is missing required scopes [read:project]` — `gh pr edit` internally queries Projects even when the PR has none.
+- Fix: `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f title='...' -f body='...'` — REST PATCH needs no extra scope. Alternative: `gh auth refresh -s read:project` (interactive browser flow). See knowledge/pr-workflow.md.
+
+## sq-parse.py arg order: owner/repo is ONE arg, before the PR number (2026-09-24)
+- First call `sq-parse.py webui2 2944 <ts>` failed: `argument pr_number: invalid int value: 'webui2'`.
+  Correct invocation is `sq-parse.py netSkope/webui2 2944 <timestamp>` — `owner/repo` as a single
+  slash-joined arg, then the PR number, then the push timestamp. Same shape as get-run-ids.py.
+  See knowledge/pr-workflow.md.

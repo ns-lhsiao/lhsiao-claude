@@ -60,3 +60,25 @@
 - `$TMPDIR` differs between sandboxed (`/tmp/claude-501/...`) and `dangerouslyDisableSandbox`
   (`/var/folders/.../T/`) Bash calls — files written by one are not at `$TMPDIR` in the other.
   Use the absolute `/var/folders/...` path when reading back.
+
+## Client Configuration suite on a shared tenant: orphan rows break everything (2026-09-24)
+- The Client Configuration grid pages at 10 rows. Any test that opens its own row via
+  `client-configuration-name-<id>` looks on page 1 only, so >9 leftover `auto_test_*` rows turn
+  the whole suite into 30 s `Locator.click` timeouts (run 35960565467: 50/1/34/16). Diagnose from
+  the footer text in count_integrity failures (`1 - 10 of 24`) and `direct_hash_url` listing old
+  `auto_test_<ms>_<uuid>_NNN` names.
+- Leak source: a fixture that creates N rows in a loop and raises before `yield` never reaches its
+  teardown. Wrap the loop in try/except, delete what was created, re-raise
+  (`many_seeded_client_configs`).
+- Seed-time cleanup (`client_configuration_cleanup`) runs under the nightly tenant lock, so every
+  `auto_test_*` row present is an orphan: manifest `max_age_hours: 0`. A 1 h or 24 h cutoff let
+  44-min-old orphans through.
+- client2's clientconfiguration API returns 503 on TC-226's 31-row create burst, 3 of 3 seeded runs
+  (04:52, 06:41, 08:28 UTC). Service-side issue; the burst also stalls the tenant for minutes.
+- Seeded baseline after PR #1423 (102be6a7): 84/1/14/2 in 1 h 42 on one xdist worker. Residuals:
+  5 pre-logon (`500 tenant configuration incomplete`), 5 version drift (footer counts Default row;
+  "Allow disabling of Private Access" not rendered with flag on), 1 fail-close routing, 2 column-
+  settings PUT timeouts (pre-existing), 1 TC-226 503, 2 load flakes.
+- Local venv without `--extra visual` fails `tests/unit/visual/test_judge_plumbing.py` (anthropic)
+  and mypy on `visual/judge.py`; `tests/unit/nightly_dashboard` needs jinja2 after #1460. Both
+  unrelated to branch work; CI installs `--all-extras`.

@@ -40,3 +40,9 @@
 - `gh pr edit <n> --body-file f` errored: `your authentication token is missing required scopes
   [read:project]` — gh's edit path queries projectsV2 even when only the body changes.
 - Fix without re-auth: `gh api -X PATCH repos/<org>/<repo>/pulls/<n> -F "body=@f"`.
+- **Use `-F`, never `-f`, for the `@file` form (2026-09-24).** `-f body=@-` silently set the PR body to
+  the literal two-character string `@-` and still returned 200 + the `html_url`, so it looks like it
+  worked — only `gh api .../pulls/<n> --jq '.body | length'` (returned `2`) exposed it. `-f` is a plain
+  string field with no `@` expansion; `-F` is the typed field that reads `@file` / `@-` (stdin).
+  Most robust for multi-KB markdown bodies: build `{"body": "..."}` with `python3 -c "import json,…"`
+  and pass `--input <file>`, then always verify with `--jq '.body | length'` before moving on.

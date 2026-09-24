@@ -43,3 +43,42 @@
 ## webui2 Monorepo
 
 - **`pnpm --filter @ns/shell` fails** with "No projects matched the filters". The shell app's package name is plain `shell`, not `@ns/shell`. Use `pnpm --filter shell test|lint|typecheck` or `cd apps/shell && npx vitest run <pattern>` directly. Same applies to other apps under `apps/<name>` — package names are unscoped.
+
+## Computed z-index cannot detect a stacking-context cap (2026-09-24)
+- Copilot dropdown-clip fix (webui2 PR #2920): reading `getComputedStyle(el).zIndex` showed the
+  override applied (100020) yet `elementFromPoint` in the overlap region still hit the covering
+  panel. Cause: an ancestor (the floating-ui portal div, z-index 50000 via the Angular host's CSS,
+  applied because `body` is `display:flex` so the static div's z-index counts as a flex item) was a
+  stacking context below the panel — inner z can never escape an ancestor context.
+- Verification pattern for z-index fixes: hit-test a GRID of points over the element's rect
+  (`document.elementFromPoint` per point, classify hit as menu/panel/other) — computed-style reads
+  alone give false greens. Also verify BOTH mount modes (embedded Angular host vs standalone):
+  embedded hid a cascade-specificity loss (prefixwrapped `:is(..., html.balkan-standalone) .x` rule
+  is (0,2,1) — the type selector inside `:is()` counts) that standalone exposed.
+- Live stacking experiments: setting `position:relative` on a portal container re-anchors its
+  absolutely-positioned children (containing-block change) — breaks floating-ui placement. Set
+  z-index only; or scope with `:has(> .child-class)` to avoid raising sibling portals.
+
+## Radix Tabs: `fireEvent.click` gives a FALSE PASS; `activationMode:'auto'` selects on focus (2026-09-24)
+- mf-cfw ENG-1270524 `TrafficSimulatorPage` (`@netskope-ui/tabs`, Radix-backed): switching the test
+  from `await userEvent.click(tab)` to RTL `fireEvent.click(tab)` (to dodge React-18 act warnings)
+  made the History-tab test fail with `aria-selected="false"`. Radix `TabsTrigger` defaults to
+  `activationMode: 'auto'`, selecting on **focus** via its mousedown→focus handling — a bare
+  `fireEvent.click` dispatches only `click`, so no tab change. Worse: the "swaps back to Simulator"
+  test still *passed* because Simulator was already selected, i.e. `fireEvent` produces vacuously
+  green tab tests. Don't trust a passing Radix-tab test written with `fireEvent.click`.
+- Fix that satisfies both: keep `userEvent` (v13 is sync) and wrap it yourself —
+  `await act(async () => { userEvent.click(screen.getByRole('tab', { name })); })`. For the initial
+  render, `await act(async () => { render(...) })` silences the Radix `Presence` layout-effect act
+  warning that plain `render()` emits.
+
+## mf-cfw eslint: `export { default } from './X'` is banned; alias the default import instead (2026-09-24)
+- A page-folder `index.ts` written as `export { default } from './TrafficSimulatorPage';` failed
+  `no-restricted-exports`: `'default' is restricted from being used as an exported name`. The
+  obvious alternative `import TrafficSimulatorPage from './TrafficSimulatorPage'` *also* errors
+  (`import/no-named-as-default`) when the module additionally exports that same name.
+- Working form: import the default under a **different** local name, then re-export it —
+  `import TrafficSimulator from './TrafficSimulatorPage'; export default TrafficSimulator;`
+- Also note mf-cfw's `import/order` group order is
+  `['index','sibling','parent','internal','external','builtin','object','type']` — so `./x` first,
+  `~/x` next, npm packages after that, and **all `import type` lines last**.

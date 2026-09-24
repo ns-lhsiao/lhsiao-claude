@@ -33,3 +33,30 @@
   not see the Netskope root cert in the macOS keychain.
 - Fix: `UV_NATIVE_TLS=1 uv sync --extra ui` (or `--native-tls`). Uses the system trust store;
   the download then succeeds. Also `uv run playwright install chromium` afterwards.
+
+## Seed tenant step needs `--api-token` for SCIM seeders (2026-09-24)
+- `python -m vanguard.seeding seed` builds its token-auth `api_client` from `--api-token`
+  (settings alias `API_TOKEN`). Both `nightly.yml` and `test.yml` Seed tenant steps only passed
+  `--username/--password`, so SCIM-backed seeders (`users_groups` group/VDI top-up) hit 401 on
+  every call while pytest in the same job had the token. Symptom: seed report says SUCCESS with
+  `users_groups: 0 created`; TC-CLIENT-243 red. Fix: add
+  `${{ secrets.API_TOKEN && format('--api-token "{0}"', secrets.API_TOKEN) || '' }}` to the
+  seed command (PR #1423, 6a65e4fb). The seed CLI's own report is not a health signal — read the
+  per-seeder WARNING lines or the pre-flight test.
+- `test.yml` has an optional `seed_manifest` dispatch input since 573ec5fc — use it to reproduce a
+  nightly leg's seeded state instead of waiting for the schedule.
+- client2 answers `500 {"error":{"message":"tenant configuration incomplete"}}` to any
+  `privateAccess.preLogon` write, so unlocking `nplan669_prelogon_config_enabled` turns 6 pre-logon
+  skips into UI-assertion failures (modal stays open, cert field absent). Needs a backend
+  capability gate, not a flag gate.
+
+## GitHub Actions log scraping from macOS (2026-09-24)
+- `gh run view <id> --log` lines are `job\tstep\ttimestamp message`; split with
+  `awk -F'\t' '$1=="test" && $2=="Seed tenant"{print $3}'`. macOS grep has no `-P`; the `grep`
+  hook may route to ugrep which rejects long alternations ("exceeds complexity limits") — keep
+  patterns short or use awk.
+- Live job logs (`gh api .../jobs/<id>/logs`) return `BlobNotFound` until the job completes; the
+  step conclusion via `gh run view --json jobs` is available immediately.
+- `$TMPDIR` differs between sandboxed (`/tmp/claude-501/...`) and `dangerouslyDisableSandbox`
+  (`/var/folders/.../T/`) Bash calls — files written by one are not at `$TMPDIR` in the other.
+  Use the absolute `/var/folders/...` path when reading back.

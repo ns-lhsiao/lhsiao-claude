@@ -30,6 +30,16 @@
             "statusMessage": "Loading caveman mode..."
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
+            "async": true,
+            "timeout": 3
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -40,6 +50,16 @@
             "command": "\"/Users/lhsiao/.nvm/versions/node/v20.19.2/bin/node\" \"/Users/lhsiao/.claude/hooks/caveman-mode-tracker.js\"",
             "timeout": 5,
             "statusMessage": "Tracking caveman mode..."
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
+            "async": true,
+            "timeout": 3
           }
         ]
       }
@@ -62,6 +82,42 @@
             "command": "~/.claude/scripts/markitdown-read-hook.sh",
             "timeout": 60,
             "statusMessage": "Converting to Markdown with markitdown..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
+            "async": true,
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
+            "async": true,
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
+            "async": true,
+            "timeout": 3
           }
         ]
       }

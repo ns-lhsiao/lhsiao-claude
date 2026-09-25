@@ -150,3 +150,51 @@ Topical reference. Each entry links to a knowledge file.
   Correct invocation is `sq-parse.py netSkope/webui2 2944 <timestamp>` — `owner/repo` as a single
   slash-joined arg, then the PR number, then the push timestamp. Same shape as get-run-ids.py.
   See knowledge/pr-workflow.md.
+
+## mf-cfw visual-check harness: `__preview__/` route + playwright-cli + MSW gotchas (2026-09-24)
+- mf-cfw uses `createHashRouter` — dev preview routes are `http://localhost:PORT/#/<route>`, NOT path URLs. A path-only URL loads the SPA shell and sits on "Loading..." forever.
+- Preview-harness precedent: `src/pages/policyAnalyzer/__preview__/PolicyGroupListPreview.tsx` + `APP_ROUTES.POLICY_ANALYZER_PREVIEW_PAGE` gated on `AppConfig.IS_DEV_ENV` in `AppRoutes.tsx` — committed to master (ee26b696), so keep new harnesses rather than reverting when the pattern matches.
+- MSW in mf-cfw dev server: needs `REACT_APP_ENABLE_MSW=true` on the `craco start` env AND the browser session must register `mockServiceWorker.js` before `worker.start()` runs — on a fresh playwright-cli profile the first page load races SW activation, so `worker.start()` (not awaited in compiled bootstrap) never attaches and requests pass through to 404. Manual `navigator.serviceWorker.register('/mockServiceWorker.js')` + reload does NOT fix it (client handshake missing). RTL tests remain the reliable submit-path proof; browser run still validates render/checklist/add-remove and the error path (bottom-right toast on the 404).
+- `src/react-app-env.d.ts` redeclares `@netskope-ui/core` (and several other @netskope-ui/* packages) with an explicit untyped export list — any component NOT listed there (e.g. `Checkbox`) fails TS2305 even though the real package exports it. Add the export to the shadow declaration when using a new component.
+- jest.mock factories hoist above imports: `React.forwardRef` inside a factory throws `Cannot access '_react' before initialization` if `import React` sits below the mock (prettier/eslint import-order can move it). Fix: `const ReactLocal = jest.requireActual<typeof import('react')>('react')` inside the factory.
+- jsdom in mf-cfw has no WebCrypto global — `crypto.randomUUID()` throws `ReferenceError: crypto is not defined`. Mirror `AnalyzeSidePanelWrapper.test.tsx`: `Object.defineProperty(globalThis, 'crypto', { value: { randomUUID: ... } })`.
+- jsdom `fireEvent.click` on a `<button type="submit">` does not trigger RHF `handleSubmit`; use `fireEvent.submit(formElement)` instead.
+- `@netskope-ui/select` real types: `onChange` is intersected with `FormEventHandler`, so a handler param typed `Array<string|number|object>` fails TS2322 — type the param `unknown` and cast inside.
+
+## openspec validate: requirement SHALL must sit on first line of body (2026-09-24)
+- `openspec archive <change> --yes` failed strict validation: `ADDED "Enum fields..." must contain SHALL or MUST` even though the body had SHALL on line 2 of a wrapped paragraph. The delta parser truncates requirement text at the first newline (`openspec change show <id> --json --deltas-only` shows the truncated text). Fix: unwrap the first sentence so SHALL/MUST lands on the body's first line.
+
+## Embedded MFE layout shift: margin-right on abs-pos `.ns-wrapper` is ignored (2026-09-25)
+- webui2 copilot widget embedded in Angular shell: tried `margin-right: 400px` on `#ns-content-wrapper`
+  (child, `width:100%` → overflows, no shrink) then on `.ns-wrapper` (computed margin applied but
+  rect unchanged). Root cause: `.ns-wrapper.authenticated` is `position:absolute; left:200px;
+  width:calc(100% - 200px)` (app.component styles) — over-constrained abs-pos ignores margin-right
+  and `right`. Only lever: rewrite `width` inline as `calc(100% - 200px - 400px)`.
+- Also: `flex: 1 1 auto` from `body .ns-wrapper` does NOT make it a flex item for sizing once
+  `position:absolute` removes it from flow. Computed width mid-transition (300ms) looked like the
+  margin "worked" — always re-probe AFTER transition ends before concluding.
+- jsdom normalizes `calc(100% - 200px - 400px)` → `calc(100% - 600px)`; assert the normalized form.
+
+## mf-cfw real-tenant validation via development-proxy (2026-09-25)
+- Path: dev-proxy (`/Users/lhsiao/ns/git/development-proxy`, port 9797, fallbackServer.host = QA tenant) + mf-cfw craco devServer with a TEMP `devServer.proxy` entry mapping the API path to `http://localhost:9797` (same-origin from the page → no CORS). Setting `REACT_APP_API_BASE_URL=http://localhost:9797` instead FAILS: cross-origin XHR, preflight has no ACAO header.
+- Login: playwright-cli against `http://localhost:9797/locallogin` with NS_TEST_USERNAME/PASSWORD; cookies land on domain `localhost` (port-agnostic) so the :3009 page session carries them.
+- Webpack chunk cache trap: after restarting `craco start` with different env, `goto` to the same URL may keep stale chunks (dev chunk names aren't content-hashed); verify with a `fetch(chunk, {cache:'no-store'})` probe and hard-reset via `goto about:blank` first.
+- Fullscreen overlay iframe (z-index 2147483647, likely MF shell/devtools artifact) swallows all clicks — `document.elementFromPoint` returns IFRAME; set `pointerEvents:none`/`display:none` on iframes wider than viewport before driving the page.
+- REAL BUG FOUND: spec-documented bare paths `/simulate` and `/analyze` 404 on real tenants; the policyanalyzer family answers at `/api/policyanalyzer/*` (verified 2026-09-25 on nsclienttw-auto.qa.boomskope.com — POST returns RBAC "Permission denied" for the test user, i.e. endpoint live). mf-cfw api-url.ts analyze entries from PR #534 need the same prefix fix.
+- playwright-cli has `cookie-list` / `cookie-get <name>` — export the session cookie and curl path variants through the proxy to map a tenant's real API surface fast.
+
+## spec:land extraction: never locate blocks by pre-computed line numbers (2026-09-25)
+- Extracting a spec.md bullet block via a line number captured BEFORE an earlier edit in the same
+  session grabbed the wrong block (decommissioned-POP tail instead of CopilotChatWidget), leaving
+  a duplicated one-liner and a truncated bullet. Fix: locate extraction targets by content match
+  (unique anchor string + structural scan for the block end) at extraction time, not by stale
+  offsets; and always verify with `git diff --stat` + a targeted grep that exactly one pointer and
+  zero truncated bullets remain before committing.
+
+## npm registry mirrors lag behind the artifactory publish target (2026-09-25)
+- `@netskope/mf-copilot@2.4.0` publish (GH Actions run, `npm publish` → `artifactory.netskope.io/.../npm-dev/`) succeeded at 05:04Z, but `npm view`/`npm pack` against BOTH read mirrors (`npmjs.netskope.io`, `artifactory-rd.netskope.io/.../netskope-npm` virtual) returned `notarget` for hours. User's GH release link was right; registry was stale.
+- Fix: don't conclude "version missing" from read-mirror 404s alone. Verify via the publish path (GH Actions run logs show the exact `+ pkg@version` line), wait for index propagation, then retry. `dist-tags` on the mirror (`2.4.x: [..., 2.4.0]`) is the confirmation signal. See knowledge/pr-workflow.md.
+
+## `/opsx:*` not registered as skills under claudeDesktop CLAUDE_CONFIG_DIR (2026-09-26)
+- In sessions using `CLAUDE_CONFIG_DIR=~/ns/git/claudeDesktop/.claude-config`, `Skill("opsx:explore")` fails `Unknown skill` — the commands live in `~/.claude/commands/opsx/*.md`, which that config dir doesn't load.
+- Fix: Read `~/.claude/commands/opsx/<cmd>.md` and follow it directly. Writes outside `claudeDesktop/` (new repos under `~/ns/git/`) need sandbox bypass.

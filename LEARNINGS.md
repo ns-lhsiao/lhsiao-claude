@@ -266,3 +266,33 @@ Topical reference. Each entry links to a knowledge file.
   lost. When the offending wrapper is a widely-shared component (used by other tables that DO have a
   scroll container and don't hit this bug), scope the fix locally via `cloneElement` overriding
   `className` on the shared renderer's output, rather than editing the shared component itself.
+- **This fix alone did NOT reproduce or fix the user's actually-reported visual bug** — see the next
+  entry for the real cause and the "reproduced X, called it done" trap this created.
+
+## Declared a visual bug fixed after reproducing a DIFFERENT bug with a similar symptom (2026-09-26)
+- Same session as above: found and fixed a genuine row-height-inflation bug (`h-full` → viewport
+  height), took a clean screenshot, and reported the user's reported "text overlap" as resolved.
+  User pushed back with their own screenshot still showing the overlap. Spent another full round
+  re-testing viewport widths (1280/1000/850px) and hover states in TWO separate dev stacks (hybrid
+  Angular + plain React via `/wb:setup:webui2-shell`) — found zero overflow in either, at any width,
+  hovering or not. The missing variable, which the user had to say out loud: **the copilot chat
+  widget must be open** — it squeezes the main content area (~830px), which is what actually narrows
+  the table enough to trigger the real bug.
+- Real root cause (distinct from the `h-full` one): `SubRowCell.tsx`'s wrapper div used a **fixed**
+  `h-[50px]`, not a minimum. At full width the POP name never wraps, so this never mattered. Narrowed
+  by the chat widget, a long POP name wraps to 3-4 lines (taller than 50px) but the box stays clamped
+  at 50px with default `overflow: visible` — the wrapped text spills past its own box, and because the
+  parent is `flex flex-col`, the NEXT sibling entry is positioned right after the first one's *nominal*
+  50px box, not its actual (taller) rendered height — so the two entries' text visually collides.
+  Fix: `h-[50px]` → `min-h-[50px]`.
+- Verification technique that actually caught it (scrollWidth/clientWidth and bounding-rect-vs-parent
+  checks both came back clean and are useless for THIS failure mode): pairwise intersect every
+  sibling `div`'s `getBoundingClientRect()` within a row — `overlapY = min(a.bottom,b.bottom) -
+  max(a.top,b.top)`, same for X, flag any pair with `overlapY > 2 && overlapX > 2` that isn't a
+  parent/child pair. Zero hits after the fix, several before.
+- **Lesson: when a user reports a specific visual defect from a screenshot, ask what interaction
+  state produced it (hover? a panel open? a specific viewport?) BEFORE declaring victory on a
+  same-area bug found via unrelated exploration** — a clean screenshot only proves the state you
+  happened to capture was clean, not that the reported state is fixed. Two real, independent bugs
+  can share a component and a symptom category ("something's wrong in this table") without being the
+  same bug.

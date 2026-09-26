@@ -201,3 +201,68 @@ Topical reference. Each entry links to a knowledge file.
 
 ## Claude `sessions/<pid>.json` `procStart` is UTC; `ps lstart` is local (2026-09-26)
 - claude-status scanner compared `ps -o lstart=` to `procStart` and rejected every live session (20:41 local vs 12:41 in file, +8h). Fix: run `ps` with `TZ=UTC`. Also: `pkill -f <abs path>` misses a node started with a relative path — kill by port (`lsof -tiTCP:<port> -sTCP:LISTEN`).
+
+## A session's "Primary working directory" under `.claude/worktrees/<slug>/` may NOT be a real git worktree (2026-09-26)
+- Session started in `/Users/lhsiao/ns/git/balken/webui2/.claude/worktrees/webui2-add-copilot-chat-widget`
+  (matches the CLAUDE.md worktree naming convention, looks legit). Editing files there and later trying to
+  commit revealed: no `.git` file/dir at all, `git status`/`git worktree list` from the PRIMARY checkout
+  never listed it, `git ls-files packages/` returned 0 (whole `packages/` dir missing on disk), and
+  `webui2/.gitignore` has `.claude/worktrees/` — the entire tree is gitignored scratch space, not a real
+  `git worktree add` target. Every edit made there is invisible to git; nothing can ever be committed from
+  it. `git status` run *from inside* that directory still printed "On branch master" because git walks up
+  and found the PRIMARY checkout's `.git` — a false signal that the directory is tracked.
+- Fix: before trusting a `.claude/worktrees/<slug>/` path as a commit target, verify with `ls -la
+  <path>/.git` (must exist) and `git -C <primary-checkout> worktree list | grep <slug>` (must be listed).
+  If missing, treat all work done there as a draft/scratch copy: create a REAL worktree
+  (`git worktree add ../<repo>-<slug> -b <branch>` from the primary checkout, per CLAUDE.md), symlink
+  `node_modules` (root + each package, absolute paths — see the pnpm-workspace entry above), re-apply the
+  edits there, re-run tests/lint/typecheck for real, then commit/push/PR from the real worktree.
+
+## webui2 hybrid dev stack (webui2-angular-shell-devbox): local ms-webui `/pinger` may only register GET, Angular POSTs to it (2026-09-26)
+- After login, the React shell's auth guard repeatedly `POST /pinger` → 404 loop → redirect to
+  `#/server-error`, even though `curl -X GET http://localhost:8080/pinger` returns `200 {}`. ms-webui's
+  gin router only had `GET /pinger` registered; the Angular/React pinger call is a POST. Recipe doc
+  (`~/.claude/skills/boot-playwright/recipes/webui2-angular-shell-devbox.md`) says `/pinger` MUST be in
+  `PUBLIC_LOCAL_API_PATHS` — true when local ms-webui supports the POST, false here.
+- Fix: drop `/pinger` from `.env.local`'s `PUBLIC_LOCAL_API_PATHS` (keep only `/api/v2/balkan,/api/v2/rbac`)
+  so it falls through to the QA tenant proxy (`WEBUI_PROXY_URL`) instead, which does answer POST. Restart
+  Vite after the `.env.local` edit. Verify by checking the browser console for repeated `/pinger` 404s
+  before concluding the stack booted cleanly.
+
+## webui2 hybrid stack: unauthenticated `#/login` hash route returns raw "Unauthorized" text, not a login form (2026-09-26)
+- `playwright-cli open http://localhost:<port>/ns#/login` (or `#/login` on the `/mf/shell/` base) with no
+  session loaded the page title "Netskope" and body text literally `Unauthorized` — no form, no fields.
+  Qualifies `knowledge/webui2-testing.md`'s existing "`/ns/...` returns a bare Unauthorized page" note
+  (line 45 there) to the base *login* hash route too, not just post-login path routes.
+- Fix: navigate to the plain path `http://localhost:<port>/locallogin` (no hash) instead — it redirects
+  through `/auth/login/local` → `/auth/login` and renders the real username/password form. Fill/submit
+  that form; login then lands you on whatever hash route you'd tried to reach pre-login.
+
+## playwright-cli `open`/`goto` after login drops the webui2 SPA session — reproduced the exact documented failure (2026-09-26)
+- `~/.claude/skills/boot-playwright/SKILL.md` already warns "SPA navigation: hash assignment, never
+  `goto`" — did it anyway (`playwright-cli open http://localhost:3000/ns#/settings/ipsec-site` on an
+  already-logged-in session) to re-navigate after restarting the dev server, and got bounced straight
+  back to `/auth/login`, losing the session exactly as the skill predicts. `reload()` on a stale
+  post-restart page also does NOT recover — it preserves whatever broken hash (`#/server-error`) was
+  showing before the restart.
+- Fix: after any backend/Vite restart, always re-run the full `/locallogin` form-fill flow fresh (session
+  cookies don't survive a server bounce anyway), and once logged in, use `eval "() => { window.location.hash
+  = '#/route' }"` for all further navigation — never `open`/`goto` a `#/...` URL on a live session.
+
+## CSS: `h-full` inside a `<td>` with no definite ancestor height resolves against the viewport, and native table row-height sharing spreads that to every sibling column (2026-09-26)
+- webui2 IPSec/GRE Site tables: two cell wrapper `<div>`s (select checkbox, row-actions ellipsis) used
+  Tailwind `h-full` (`height: 100%`). On pages with few rows and no scroll-container height, Chrome had no
+  definite ancestor height to resolve the percentage against and fell back to the viewport height (~720px
+  measured). Because a native `<tr>` forces ONE shared height across all its `<td>`s, the entire row —
+  every column, not just the two offending ones — inflated to that viewport-derived height (measured
+  768px on a real tenant for what should be a ~116px 2-row cell).
+- Diagnosis pattern: `document.querySelector('table tbody tr').getBoundingClientRect()` to catch the
+  inflated row, then walk each `<td>`'s `firstElementChild.getBoundingClientRect().height` to find which
+  column(s) actually want the oversized height (`h-full` present) vs which render at their true natural
+  size (no `h-full`, just `flex flex-col`) — the row height is the MAX across all cells, so only the
+  culprit's own inner-div height differs from the rest.
+- Fix: drop `h-full` from the offending divs; the `<td>`'s own `align-middle` (or `vertical-align`)
+  already centers content once the row's height is correctly content-driven — no centering behavior is
+  lost. When the offending wrapper is a widely-shared component (used by other tables that DO have a
+  scroll container and don't hit this bug), scope the fix locally via `cloneElement` overriding
+  `className` on the shared renderer's output, rather than editing the shared component itself.

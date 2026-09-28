@@ -82,3 +82,44 @@
 - Also note mf-cfw's `import/order` group order is
   `['index','sibling','parent','internal','external','builtin','object','type']` — so `./x` first,
   `~/x` next, npm packages after that, and **all `import type` lines last**.
+
+## @netskope-ui/table interaction hooks for tests: sort = mouseDown, pagination testids, no row-click prop (2026-09-28)
+- Header sort toggles fire on **`mouseDown`** of the th content div (`data-testid="table-column-<accessorKey>"`),
+  not click — `fireEvent.click` on the header text silently does nothing (and 'Action'-style labels also appear
+  as BasicFilter chip text, so `getByText` is ambiguous anyway). Use
+  `fireEvent.mouseDown(screen.getByTestId('table-column-action'))`.
+- Pagination controls come from `@netskope-ui/pagination` with `id="table"`: testids are
+  `table-pagination-move-next`/`-move-prev`, `table-pagination-page-N`, `table-pagination-select`,
+  `table-pagination-container`. The next/prev "buttons" are SVG icons with `role='button'` +
+  `aria-disabled` — `toBeEnabled()` passes vacuously on them; assert `aria-disabled="false"` instead, and
+  re-query at click time (the node is re-created when pageCount lands via effect).
+- The Table has **no row-level click prop** (only `rowActions`/`activeRow`). Repo convention for clickable rows
+  is a clickable primary cell (`cursor-pointer font-bold text-action-text` + onClick in the cell renderer) —
+  see NetworkLocationHome / DnsProfilesInheritanceGroupsHome. `@netskope-ui/core` Text passes through
+  onClick/onKeyDown/role/tabIndex (CommonHTMLAttributes), so the cell can be the affordance directly.
+
+## mf-cfw ApiQueryClientProvider holds a module-level singleton QueryClient — cache leaks across tests (2026-09-28)
+- `src/common/providers/ApiQueryClientProvider.tsx` creates ONE `new QueryClient(...)` at module scope. In a
+  jest file with several tests, earlier tests' query results stay cached under their param-keyed queryKeys, so a
+  later test that reuses the same key can skip the fetch entirely (a pagination test that expects a second call
+  with `offset: 10` sees "Number of calls: 1"). Symptom is flaky order-dependent failures.
+- Fix for tests exercising refetch/pagination behavior: render with your own fresh
+  `new QueryClient({ defaultOptions: { queries: { retry: false } } })` per test instead of ApiQueryClientProvider.
+- Related: react-query **structural sharing** clones response objects — a "hands the exact row object through"
+  assertion must be `toStrictEqual`, not `toBe`; reference identity is lost at the query layer, not in your code.
+
+## mf-cfw: bare `npx jest` breaks on @netskope-ui ESM; always run `craco test` (2026-09-28)
+- `npx jest <path>` fails with `SyntaxError: Unexpected token 'export'` in `@netskope-ui/*/dist/es/*.js` —
+  package.json's jest config only registers an @swc/jest transform for `.ts|.tsx`; the `.js` babel transform
+  (which handles the transformIgnorePatterns @netskope-ui exceptions) is injected by craco/CRA at runtime.
+  Use `CI=true npx craco test --watchAll=false --testPathPattern="<pattern>"`.
+- Also: with a symlinked node_modules chain across worktrees, jest stack traces show the *realpath* of the donor
+  worktree (`../mf-cfw-eng-XXXX/node_modules/...`) — cosmetic, not a resolution bug.
+
+## mf-cfw dev-preview harness for a fetching component: request-time axios adapter (2026-09-28)
+- The `__preview__` route pattern (PolicyGroupListPreview precedent) works for fetching components too: register
+  an `api.interceptors.request.use` at the preview module scope (lazy route → only installs when visited) that
+  RETURNS `{ ...config, adapter: (cfg) => Promise.resolve({ data: fixture(cfg.params), status: 200, ... }) }`
+  for the one URL. eslint `no-param-reassign` bans `config.adapter = ...` — spread a new config instead.
+  Fixture honoring offset/sortby/jql makes pagination/sort/filter genuinely interactive in the browser with no
+  tenant and no MSW (mf-cfw's MSW dev-server race makes it unreliable; see knowledge/mf-cfw.md).

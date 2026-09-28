@@ -296,3 +296,8 @@ Topical reference. Each entry links to a knowledge file.
   happened to capture was clean, not that the reported state is fixed. Two real, independent bugs
   can share a component and a symptom category ("something's wrong in this table") without being the
   same bug.
+
+## `truncate` inside nested flex wrappers silently no-ops without `min-w-0` on EVERY flex-item ancestor (2026-09-28)
+- webui2 tunnel POP column: master's #2999 added `truncate` + `min-w-0` to `PopNameDisplay`, but the caller's `renderPop` wrapper `div.flex items-center gap-1` kept default `min-width:auto` — stayed 216px in a 180px cell, text overlapped next column. User said "still not fixed" after rebase; my earlier SubRowCell fix had become moot post-rebase and I hadn't re-verified.
+- Diagnose: walk up from the `.truncate` span printing `getBoundingClientRect().width` + computed `minWidth`; first ancestor wider than its container with `minWidth: auto` is the culprit. Fix: `min-w-0` there.
+- Rule: after rebasing a visual fix onto a master that touched the same component, re-run the live repro (same interaction state) before re-claiming the fix.

@@ -21,3 +21,20 @@
 - `npx jest src/...` in mf-cfw fails every RTL suite with `ReferenceError: document is not defined` —
   the jsdom env + moduleNameMapper live in craco's jest config, not a standalone jest.config.
   Use `CI=true yarn -s test <path>` (`craco test --watchAll=false`).
+
+## Cypress dns-resolver "Table Row Actions" flake: unstubbed admin-preferences API (2026-09-29)
+- CI symptom: 2/46 fail in `dns-resolver.cy.ts` (row-actions menu items never found) on a PR that
+  touched nothing in dnsResolver. Cause: `withAdminPreferences` (wrapping `DNSResolverTable` via
+  `@netskope-ui/table`) fires GET `/api/v2/platform/admin/preferences?page=<page>` + initial
+  per-feature saves on every mount; the spec never intercepted them, so they fell through to the
+  dev-server proxy (`https://developer.vbox`, ENOTFOUND in CI) and failed slowly — the HOC's late
+  state updates re-render the table and close an open Radix row-actions dropdown mid-test.
+- Fix: stub in the spec's top-level beforeEach — GET `pathname: '**/api/v2/platform/admin/preferences'`
+  → `[]`, and catch-all `pathname: '**/api/v2/platform/admin/preferences/**'` → `{}`. Any spec whose
+  table uses withAdminPreferences needs the same stubs.
+- **Local `cypress run` CANNOT reproduce CI for these specs**: locally the dev proxy resolves to a
+  live tenant, so `featureflags/rbac_v3_feature_enabled` returns real values → RBAC v3 path
+  (`/rbac/roles/me` + `/rbac/apigroups/pagemapping`) → 403 Not Authorized page; the spec's legacy
+  `pagepermissions` intercept never matches and all tests die in before-each. In CI those calls
+  ENOTFOUND → app falls back to the legacy path the mocks target. Validate spec changes on CI, or
+  stub the rbac_v3 flag off locally first.

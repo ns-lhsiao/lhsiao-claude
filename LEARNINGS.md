@@ -99,6 +99,12 @@ Topical reference. Each entry links to a knowledge file.
   via Bash, not the Read tool's line numbers. The `Edit` tool's `old_string` matching still operates
   on real on-disk content regardless of what Read displayed, so exact-string edits sourced from
   `sed`/`grep` output remain safe even when Read's own numbering is unusable.
+- Worse case (2026-09-29, `all-html/index.html`): when the reflowed rendering comes from a markitdown
+  cache AND is truncated ("PARTIAL view ... cap 25000 tokens"), Edit's read-gate never registers the
+  file as read — every Edit fails "File has not been read yet", even after paging through all offsets.
+  Recovery: do the exact-string replacement via Bash (`python3` read_text/replace/write_text with a
+  `count == 1` assert), with sandbox bypass if the file lives outside the session cwd. Smaller HTML
+  files (the per-report pages) don't hit this — Edit works there after one partial Read.
 
 ## `/wb:spec:land` skill writes files on master, silently violating the global worktree mandate (2026-09-23)
 - Ran `/wb:spec:land port-client-saml-cert-rotation` from a Stop-hook prompt while on `master` in the

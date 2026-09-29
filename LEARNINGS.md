@@ -198,6 +198,15 @@ Topical reference. Each entry links to a knowledge file.
 ## `/opsx:*` not registered as skills under claudeDesktop CLAUDE_CONFIG_DIR (2026-09-26)
 - In sessions using `CLAUDE_CONFIG_DIR=~/ns/git/claudeDesktop/.claude-config`, `Skill("opsx:explore")` fails `Unknown skill` — the commands live in `~/.claude/commands/opsx/*.md`, which that config dir doesn't load.
 - Fix: Read `~/.claude/commands/opsx/<cmd>.md` and follow it directly. Writes outside `claudeDesktop/` (new repos under `~/ns/git/`) need sandbox bypass.
+- Same root cause for `/boot-*` (live in `~/.claude/skills/`) and `/wb:*` (plugin installed only under
+  `~/.claude/plugins/`) — an alternate `CLAUDE_CONFIG_DIR` loads only its own `skills/`, `commands/`,
+  `plugins/`. Permanent fix (2026-09-29), user must run it — those dirs are on the sandbox write
+  denylist and auto-mode refuses the bypass:
+  `ln -sfn ~/.claude/skills/boot-* $CFG/skills/`, `mkdir -p $CFG/commands && ln -sfn
+  ~/.claude/commands/opsx $CFG/commands/opsx`, then `CLAUDE_CONFIG_DIR=$CFG claude plugin marketplace
+  add netSkope/webui-balkan-claude-plugin && CLAUDE_CONFIG_DIR=$CFG claude plugin install
+  wb@webui-balkan-claude-plugin`. Restart the session afterwards; symlinked skills appear immediately
+  but plugins/commands only load at startup.
 
 ## Claude `sessions/<pid>.json` `procStart` is UTC; `ps lstart` is local (2026-09-26)
 - claude-status scanner compared `ps -o lstart=` to `procStart` and rejected every live session (20:41 local vs 12:41 in file, +8h). Fix: run `ps` with `TZ=UTC`. Also: `pkill -f <abs path>` misses a node started with a relative path — kill by port (`lsof -tiTCP:<port> -sTCP:LISTEN`).

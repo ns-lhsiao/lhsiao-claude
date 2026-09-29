@@ -312,6 +312,15 @@ Topical reference. Each entry links to a knowledge file.
   can share a component and a symptom category ("something's wrong in this table") without being the
   same bug.
 
+## Monitor-tool scripts run SANDBOXED — `gh` fails TLS (OSStatus -26276) silently inside them (2026-09-29)
+- A Monitor polling `gh pr checks ... || { sleep 60; continue; }` delivered zero events for 30 min
+  while CI had long finished: sandboxed `gh` fails every call with `tls: failed to verify
+  certificate: x509: OSStatus -26276` (seen identically on a plain sandboxed Bash `gh` call), and
+  the `|| continue` swallowed it, so silence looked like "still pending".
+- Fixes: (a) verify with one direct `dangerouslyDisableSandbox` call before trusting monitor
+  silence; (b) in monitor scripts, don't fully swallow the poll-command failure — emit a one-time
+  "poll failing: <err>" line on first failure so the sandbox problem surfaces as an event.
+
 ## `truncate` inside nested flex wrappers silently no-ops without `min-w-0` on EVERY flex-item ancestor (2026-09-28)
 - webui2 tunnel POP column: master's #2999 added `truncate` + `min-w-0` to `PopNameDisplay`, but the caller's `renderPop` wrapper `div.flex items-center gap-1` kept default `min-width:auto` — stayed 216px in a 180px cell, text overlapped next column. User said "still not fixed" after rebase; my earlier SubRowCell fix had become moot post-rebase and I hadn't re-verified.
 - Diagnose: walk up from the `.truncate` span printing `getBoundingClientRect().width` + computed `minWidth`; first ancestor wider than its container with `minWidth: auto` is the culprit. Fix: `min-w-0` there.

@@ -57,6 +57,7 @@ Topical reference. Each entry links to a knowledge file.
   line/call), or (b) a zsh array (`FILES=(a b c); git diff HEAD -- $FILES[@]`) or
   `${=FILES}` (forces word-split) if a variable is required. Applies to vanguard's
   local-pr-review.md phase and any other multi-file git command built from a joined string.
+- Same zsh flavor: `echo ===` fails with "== not found" — zsh does `=word` command-path expansion on args starting with `=`. Quote it: `echo "==="`.
 
 ## rtk-wrapped git commands false-positive on the worktree isolation guard (2026-09-21)
 - Inside a worktree session (webui2-fix-bwc-source-ip-remap), plain `git status`, `git diff
@@ -344,3 +345,9 @@ Topical reference. Each entry links to a knowledge file.
 - Switching the type dropdown clears the attached Destination Profile; attach the profile AFTER choosing the final type. Picker options need a native click on `text=Destination Profile = Select`, then native-setter input event; options arrive ~30-60s later (passthrough), poll for them.
 - `constants.php` `RBAC_V3_SERVER`/`MS_PLATFORM_SERVER` may also carry DEVBOX-TEMP edits; `git status` the worktree before commit and `git checkout --` every non-fix file.
 - Repo commit style for webui is `ENG-NNNN: subject` (not `fix(ENG-...)`).
+
+## Flag-removal edits: user's mental model is "unwrap the gate, keep the body" — confirm before stripping shared infra (2026-09-30, ENG-960552)
+- Removing CF `NPLAN5161_CFW_GEO_LOCATION_SUPPORT` + FF `nplan5161_cfw_geo_location_support` in webui (GA): while stripping the CFW_FIELD.SOURCE_COUNTRY/DESTINATION_COUNTRY enum + label entries from `cfw-unsupported-warnings.util.ts`, the user interrupted: 「這個任務是把flag 移除，讓本來 if(flag) (...) 變成 (...)，不是連 (...) 一起移除」— i.e. the default expectation for flag removal is `if (flag) { X }` → `X`, NOT deleting the gated body or its supporting infra (enum/labels/spec cases).
+- For POSITIVE gates that rule is complete. For NEGATIVE gates (`if (!flag && cond) { warn }`) the two readings give OPPOSITE behavior: unwrap-to-`if (cond)` makes the warning ALWAYS fire (a GA regression); delete-branch makes it never fire (correct GA semantics, since "flag off ⇒ warn unsupported" and GA ⇒ always supported). This ambiguity is real — ASK with a concrete two-option question before proceeding; user then approved whole-branch deletion + enum/label/spec removal.
+- Corollary: inert fields can outlive their consumers — `CfwWarningInput.srcCountries/dstCountries` had to STAY (component still passes them at the getCfwUnsupportedWarnings call site) even though no branch reads them anymore; verify each "unused" field's callers before deleting interface fields.
+- webui worktree Jest specifics hit this session: `inline-policy-form.component.spec.ts` OOMs on default heap — run with `NODE_OPTIONS="--max-old-space-size=8192"` + `--runInBand`; `neo/node_modules` symlinks fine from primary. rtk hook compresses jest stdout so `| grep` pipes see nothing — redirect to a file (`> $TMPDIR/x.log 2>&1`) and grep the file. `cfw-unsupported-warnings` message grammar: `joinLabels` uses "apply" (plural) for 2+ fields — "Activities apply ... and ARE not applicable" (wrote "is", test caught it).

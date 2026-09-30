@@ -325,3 +325,22 @@ Topical reference. Each entry links to a knowledge file.
 - webui2 tunnel POP column: master's #2999 added `truncate` + `min-w-0` to `PopNameDisplay`, but the caller's `renderPop` wrapper `div.flex items-center gap-1` kept default `min-width:auto` — stayed 216px in a 180px cell, text overlapped next column. User said "still not fixed" after rebase; my earlier SubRowCell fix had become moot post-rebase and I hadn't re-verified.
 - Diagnose: walk up from the `.truncate` span printing `getBoundingClientRect().width` + computed `minWidth`; first ancestor wider than its container with `minWidth: auto` is the culprit. Fix: `min-w-0` there.
 - Rule: after rebasing a visual fix onto a master that touched the same component, re-run the live repro (same interaction state) before re-claiming the fix.
+
+## rtk hook mangles quoted grep patterns — parentheses/quotes stripped, silent 0-match (2026-09-29)
+- Inside a worktree session, `grep -n "getAppTypeInUse() === 'none'" <file>` (rtk hook rewrite) returned
+  `0 matches for 'getAppTypeInUse() === 'none''` — the quoted pattern was passed through with quoting
+  mangled (nested single-quotes inside double-quotes survive only partially), so grep matched nothing.
+  Same for `hasValidDestinationProfiles(this.data)`. Earlier rtk grep calls with simpler quoted patterns
+  DID work (compressed "10 matches in 1 files" output), so the failure is pattern-dependent, not universal.
+- Fix: invoke the real binary directly — `/usr/bin/grep -n "<pattern>" <file>` — always reliable inside
+  worktree sessions (same bypass as git: see rtk-wrapped git entry). Treat rtk grep "0 matches" with
+  any suspicion unless the pattern is trivially simple.
+
+## webui devbox restart recovery + RTP policy save quirks (2026-09-30, ENG-1254632)
+- After Docker restart the whole devbox stack is down and in-container patches are lost (`/opt/ns/common/secure/devbox_api_gateway_passthrough`); host-mounted nginx conf edits survive. Bring up with `NS_WEB_UI_DIR=<worktree> docker compose up -d memcached assets redis web angular-ui ms-rbac ms-platform ms-auth ms-locale` AND `mf-reporting ms-reporting mf-data-lineage`: nginx crash-loops (`host not found in upstream "mf-reporting:8080"`) if those upstreams are absent, so `/locallogin` shows chrome-error.
+- `playwright-cli open` inside the sandbox fails `EPERM ... ~/Library/Caches/ms-playwright/daemon/...`; run it with the sandbox disabled.
+- Saving an RTP policy on devbox: `addPolicy` fails `RIS Error ... CURL Error (3) PUT /internal/v1/objectconsumers/rtp/...` (no RIS service) and the row is cancelled. Temp-bypass `$risResponse = null` after `processCreateRequest` in `Inline_policies.php::addPolicyInternal` (DEVBOX-TEMP, revert). SAVE also opens a Policy Position modal: pick group, then a position radio.
+- Position radios are absent from `playwright-cli snapshot` and text selectors: click by coordinates (`mousemove x y; mousedown; mouseup`); modal Save via its snapshot ref.
+- Switching the type dropdown clears the attached Destination Profile; attach the profile AFTER choosing the final type. Picker options need a native click on `text=Destination Profile = Select`, then native-setter input event; options arrive ~30-60s later (passthrough), poll for them.
+- `constants.php` `RBAC_V3_SERVER`/`MS_PLATFORM_SERVER` may also carry DEVBOX-TEMP edits; `git status` the worktree before commit and `git checkout --` every non-fix file.
+- Repo commit style for webui is `ENG-NNNN: subject` (not `fix(ENG-...)`).

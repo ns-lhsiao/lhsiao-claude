@@ -25,6 +25,8 @@ mcp.json
 !skills/quick-implement/**
 !skills/serve-nplan-6460/
 !skills/serve-nplan-6460/**
+!skills/escalation-verify/
+!skills/escalation-verify/**
 !skills/design-parity/
 !skills/design-parity/**
 !skills/boot-troubleshoot/

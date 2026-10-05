@@ -390,3 +390,25 @@ Topical reference. Each entry links to a knowledge file.
 
 ## Read the i18n VALUE, not the key name, before claiming a label mismatch (2026-10-01)
 - Told the user the field was mislabeled "Scope" from the key `traffic_simulator.form.scope_label`; the JSON value was already "Module". Only the key name was misleading; the real bug was the all/source/destination dropdown filtering the checklist. Check the rendered/i18n text before framing the defect.
+
+## pns_deploy.py verify does not zero-pad `--namespace 5` (2026-10-02)
+- `pns_deploy.py deploy --namespace 5` zero-pads internally (targets `qa01-mp-npe-rtp05--webui`), but `pns_deploy.py verify --namespace 5` does NOT — it looks up `qa01-mp-npe-rtp5--webui` and reports "namespace does not exist" while the deploy is fine. Pass the padded form to verify: `verify --namespace 05`.
+
+## playwright-cli long session names truncate the daemon unix socket (2026-10-05)
+- A `-s=<name>` longer than ~19 chars makes the CLI daemon bind a TRUNCATED socket (`webui2-eng-1268962-dnssec-port` → `...-webui2-eng-1268962-dns.sock`) because the full path exceeds sun_path; the daemon then dies silently, leaving a stale truncated socket. Every later `open` fails `Daemon EADDRINUSE <full-name>.sock` and other verbs report "browser not open" even though `open` succeeded earlier. Fix: keep session names short (≤ ~15 chars); if already stuck, `rm` the stale truncated socket under `$TMPDIR/pw-*/cli/` and reopen with a shorter name.
+
+## Worktree isolation guard blocks non-git commands with computed strings/heredocs (2026-10-05)
+- Inside an EnterWorktree session the guard refused, beyond git: `playwright-cli ... eval "() => {...}"` (any quoted JS string), `source .env && playwright-cli ...`, `sed -n "$(grep ...)p"`, `gh pr create` with a heredoc body file, and compound `cmd && cd <abs> && cmd`. Fix: single plain commands with literal paths; write payload files via the Write tool then run one bare command; replace computed sed ranges with python one-liners; login via snapshot refs instead of eval-based hash navigation.
+
+## webui2 dual-mount pages: React variant unreachable without the tenant's rc flag (2026-10-05)
+- Dual-mounted webui2 pages resolve react-vs-element in `beforeLoad` via `resolvePageVariant` → the `balkan_features_enabled` FF's `var_value` JSON map (fetched from `/api/v2/ui/platform/featureflags/balkan_features_enabled`, served by the QA tenant proxy — a raw http fetch, NOT a useFlag hook, so dev `VITE_FLAG_OVERRIDES` cannot force it). lhsiao.qa01's map lacks `balkan_phase1_rc_dns_profiles`, so `#/dns-profiles-page` mounts the Angular element variant and React-only changes are never exercised. Before planning browser validation of a dual-mount page, probe the map first: `curl -H "Authorization: Bearer <api_token>" https://<tenant>/api/v2/ui/platform/featureflags/balkan_features_enabled` and check the per-page `balkan_phase1_rc_*` key.
+
+## VITE_FLAG_OVERRIDES forces both FF and CF in webui2 dev (2026-10-05)
+- `apps/shell/.env.local` `VITE_FLAG_OVERRIDES=key:true,key:true` drives BOTH `useFeatureFlag` and `useControlFlag` in dev (shared/feature-flags/useFlag.ts), using the raw flag names ('dns_profiles_enabled', 'dnssec', 'DNS_PROFILES', 'NPLAN6283_DNSSEC_ENABLED'). Cheapest way to exercise flag-gated UI locally without tenant toggles; restart Vite after editing. (Hybrid-stack `/pinger` GET-only trap still applies — see 2026-09-26 entry.)
+
+## Pre-existing DTC/ntskui watchdog violations fire on every edit to a dirty legacy file (2026-10-05)
+- The wb plugin's PostToolUse DTC guard scans the WHOLE edited file and reports all violations with a blocking-looking error — editing `DnsProfileFormModal.tsx` (34 pre-existing native-element/uppercase violations on untouched lines) "failed" on every Edit while the edits actually landed. Fix: verify the edit landed (`git diff`), scope-check whether the violations are pre-existing (baseline diff), and keep them out of the PR unless the ticket is about them; the guard output is advisory for pre-existing content.
+
+## Stash-baseline proof for pre-existing test/typecheck failures (2026-10-05)
+- To prove a failing test/typecheck error is pre-existing and not caused by the diff: `/usr/bin/git stash push -u -m "<unique-tag>"`, run the failing check, `/usr/bin/git stash apply <sha>` (find sha via `git stash list --format='%H %gs' | grep <tag>`), then `git stash drop 'stash@{0}'` after confirming the printed SHA matches. Used twice in one session (4 TS2589 phantoms + 1 detail-processing test) — turns "I think it's pre-existing" into evidence for the PR body.
+

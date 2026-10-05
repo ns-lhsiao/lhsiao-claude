@@ -418,3 +418,19 @@ Topical reference. Each entry links to a knowledge file.
 ## Stash-baseline proof for pre-existing test/typecheck failures (2026-10-05)
 - To prove a failing test/typecheck error is pre-existing and not caused by the diff: `/usr/bin/git stash push -u -m "<unique-tag>"`, run the failing check, `/usr/bin/git stash apply <sha>` (find sha via `git stash list --format='%H %gs' | grep <tag>`), then `git stash drop 'stash@{0}'` after confirming the printed SHA matches. Used twice in one session (4 TS2589 phantoms + 1 detail-processing test) — turns "I think it's pre-existing" into evidence for the PR body.
 
+
+## Deferred-promise jest mocks + chained `expect().rejects` re-invoke the fn; second call gets undefined (2026-10-05)
+- `mockPost.mockResolvedValueOnce(body)` followed by TWO assertions (`await expect(fn()).rejects.toThrow(msg)` then `await expect(fn()).rejects.toBeInstanceOf(...)`) fails the second: each `expect(fn())` CALLS fn again, the Once-mock is consumed, second call resolves undefined → `resp.data.data` throws TypeError, not the guarded AxiosError.
+- Fix: `mockResolvedValue` (non-Once) or catch once: `const caught = await fn().then(() => { throw new Error('expected reject') }, (e) => e)` then assert everything on `caught`. Mirrors trafficSimulator.api.test.ts's pattern.
+- Also: error-dialect it.each rows need a per-row expected message — a body with no `errors` array falls through `parseErrorResponse` to the generic i18n "Something went wrong", so `toBe('Permission denied')` only holds for bodies that carry an errors array.
+
+## jest.mock factory that RECORDS config needs a globalThis holder, not a module-level binding (2026-10-05)
+- Extends the known "factories hoist above imports" trap: a test that captures `withAuthorization(Component, config)`'s config into `let captured` throws `Cannot access 'capturedConfig' before initialization` (TDZ — factory call happens at wrapper-import time, hoisted above the declaration); switching to `var` degrades to `Cannot set properties of undefined` (import still runs before the initializer).
+- Fix: store inside the factory on `(globalThis as Record<string, unknown>).__name = config` — globalThis exists at every phase; read it back in the test body. Applies to any "assert the HOC/gate config" test.
+
+## Symlinked node_modules can go DANGLING mid-session when another session deletes the target worktree (2026-10-05)
+- `mf-cfw-eng-1274461-nplan-6460-main/node_modules -> mf-cfw-eng-1266586-analyze-sidepanel-filter/node_modules` died when a concurrent cleanup deleted that (long-merged) worktree — jest had run fine via the chain an hour earlier. Sibling worktrees were no rescue: every one's node_modules also symlinked to the deleted tree.
+- Fix: before any yarn run, probe `ls node_modules/.bin/craco` (fails with `No such file or directory` even though `ls -la node_modules` shows a plausible symlink). If dangling and no sibling has BOTH a matching yarn.lock hash AND a real (non-symlink) node_modules, just run `yarn install --frozen-lockfile` (~27s, also generates `.husky/_/`). Don't symlink a mismatched lockfile.
+- Same session: background Bash shells do NOT inherit nvm PATH — bare `yarn` exits 127 with no output. Use the absolute binary: `/Users/lhsiao/.nvm/versions/node/v20.19.2/bin/yarn`.
+- Also: don't redirect background dev-server logs to `$TMPDIR` — it resolves per-turn, so a later probe reads a different dir and the log "doesn't exist". Use a stable path like `/tmp/claude/<name>.log`.
+- Minor CLI: `openspec validate --change <name>` is wrong; the flag-less form is `openspec validate "<name>"`.

@@ -465,3 +465,25 @@ Topical reference. Each entry links to a knowledge file.
 ## openspec validate + helm/nginx local verification recipe for chart+conf changes (2026-10-06)
 - helm: fetch chart dep unsandboxed (`helm dependency update`, artifactory not sandbox-reachable), render sidecar values by `sed "s/{{ SUFFIX }}/npe-pr-42/g" template > values.yaml`, `helm template` with per-cluster values; prove template-inertness by rendering old-values+new-template vs the pre-change baseline render (`diff` → IDENTICAL).
 - nginx: wrapper conf (`events{} error_log /dev/stderr; http{ access_log /dev/stdout; include <default.conf>}`), sed-patch `/var/log/nginx/access.log` and `root` to local paths (container-only paths fail -t), `nginx -c` + curl matrix, `nginx -s stop`.
+
+## mf-gre-ipsec dark-mode bump: shadow decls hide RUNTIME-dropped components (2026-10-06, PR #145)
+- `@netskope-ui/core` 12 dropped `Input` (replaced by `InputV2`) — tsc stayed green because `src/react-app-env.d.ts` still declared `export const Input;`. The component rendered as `<undefined>` and only jest caught it ("Element type is invalid ... got: undefined"). Extends the known TS2305 trap: shadow declarations don't just hide NEW exports, they also hide REMOVED ones.
+- Diagnosis trick: scratch jest spec that does `import * as core` and logs `Object.entries(core).filter(([,v]) => typeof v === 'undefined')` — pinpoints every dropped export in one run. Delete the scratch spec after.
+
+## hocs v2 `withAuthorization` is a different API (2026-10-06, PR #145)
+- `@netskope-ui/hocs` 2.x resolves permission via `GET /api/v2/rbac/roles/me` (filters `apiGroups[]` by `apiGroupName`) — the v1 `GET /api/v2/ui/auth/authorize/pagepermissions?parentpagename=&pagename=&privilegename=` endpoint is GONE. Migration: pass `apiGroupName` explicitly (old `privilegeName` prop ignored).
+- Resolve a page's group name from a real tenant: playwright login → cookie-list → `curl -H "Cookie: ..." /api/v2/rbac/apigroups/pagemapping` → entry `{v2_page_name, v2_parent_page_name, v3_api_group_name}` (express connect = `express_connect`). RBAC none fixture for v2 = `{apiGroups: []}` (group absent), NOT a permission string.
+
+## craco-swc injects a catch-all jest transform that DROWNS package.json `transform` entries (2026-10-06)
+- `craco test --showConfig` dump: craco-swc adds `^.+\.(js|jsx|mjs|cjs|ts|tsx)$` → @swc/jest FIRST, before any package.json `jest.transform` entries. Jest first-match → package.json transform entries are dead weight (added `(mjs|cjs|js|jsx)` entry changed nothing but confusion). Fix ESM node_modules via `transformIgnorePatterns` whitelist ONLY.
+- `uuid ^14` (transitive via new @netskope-ui icons/utils) is ESM-only (`export` in dist/index.js) — whitelist `uuid` alongside `@netskope-ui`: `<rootDir>/node_modules/(?!(axios|...|@netskope-ui|uuid))`.
+- `@netskope-ui/table` 6.4.x sorts DESC on first header click (was asc-first) — a silent behavioral change e2e sort tests must be flipped for.
+- `@netskope-ui/toast-factory` 3.x: `addToast(type, text, position, isDismissable)` + `ToastFactory position` prop unchanged from v1 — no code migration needed; toast DOM has no `.custom-toast` class (that's a doc example) — assert via text + `[data-testid="toast-close-button"]`.
+
+## cypress tenant-through validation pattern via devServer.proxy + cookie injection (2026-10-06, PR #145)
+- Serve local craco dev with TEMP `devServer.proxy: {'/api': {target: 'https://<tenant>', changeOrigin: true, secure: false}}` (DEVBOX-TEMP, revert before commit). Cypress spec injects tenant session cookies as LOCALHOST cookies (`cy.setCookie`) — proxy forwards the Cookie header to the tenant, so no dev-proxy port-jump or cross-origin cypress visit is needed. Env-gate the spec (`CYPRESS_CI_SESSION`/`CYPRESS_AUTH_SESSION`), never commit secrets. Use passthrough `cy.intercept(...).as()` (no fixture) to await + assert REAL responses (statusCode + body.total).
+- Tenant login via curl is a dead end (form is JS-rendered; `/api/auth/login` 401) — playwright-cli fill/click on `/locallogin` works, then `cookie-list` exports the session.
+
+## `openspec init` inside a fresh repo worktree (2026-10-06)
+- `openspec init` EPERMs writing `~/.config/openspec/config.json` under the sandbox — bypass sandbox. It also rewrites the repo's TRACKED `.claude/commands/opsx/*.md` + `.claude/skills/openspec-*/SKILL.md` (scaffolding churn) — `git checkout -- .claude/` before commit (needs sandbox bypass again: unlink EPERM on `.claude/skills`).
+- `openspec` CLI in-worktree also needs care: `openspec list` fails if only `openspec/config.yaml` exists (no changes/ dir) — run `openspec init` once to scaffold `changes/` + `specs/`.

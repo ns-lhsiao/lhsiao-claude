@@ -439,3 +439,29 @@ Topical reference. Each entry links to a knowledge file.
 - A12 fix keyed only `groupFindingsByPolicyGroup`'s Map by the composite `order:name` — review caught that `Accordion.Item id`, `activeIds` (init/search/focus effects), collapsed-row React key, `data-policy-group` (geometry map), testids, and `PolicyDetailPanel`'s `displayNumberByGroup` Map ALL still keyed on the bare name, so the exact duplicate-name scenario stayed broken (both groups toggle together, wrong display numbers, duplicate DOM ids).
 - Rule: when a fix changes how an entity is identified, grep every consumer of the OLD identity value (`grep -n groupName`) and switch them all in the same commit — a half-applied identity change is worse than none (it looks fixed).
 - Self-inflicted trap in the same fix: `groupKeyOf(finding)` — helper typed `{groupOrder, groupName}` fed a finding (`policy_group_order`/`policy_group_name`) silently produced `"undefined:undefined"` and killed the focus cap-lift; the existing focus-lift test caught it. When a helper's param shape differs from the call site's object, tsc stays quiet if the fields are optional-compatible — always re-run the dependent tests after such a refactor.
+
+## Angular `*ngIf`-mounted MFE wrapper loses a same-tick window event — wait for the MFE's READY (2026-10-05, ENG-1338904)
+- webui `openAnalyzePanelWithMode` set `showAnalyzePanel=true` and dispatched `ANALYZE_SIDE_PANEL_OPEN` synchronously; the wrapper renders on a later CD pass and React registers its listener in a `useEffect`, so the first click was lost (every reopen too, since CLOSE unmounts). mf-cfw already dispatched `ANALYZE_SIDE_PANEL_READY`; webui just never listened. Fix: park the mode, flush one OPEN on READY, reset on CLOSE (PR webui#19052). Grep for the counterpart event before inventing a `setTimeout` workaround.
+- Jest spying `window.addEventListener`/`dispatchEvent` to fire the real listener was flaky in that spec; assert `addEventListener` was called with the bound ref and invoke `component.boundOnX(event)` directly.
+- Devbox gotchas: `ns.globals.nplan6460_policy_analyzer_enabled` (from `isNplan6460PolicyAnalyzerEnabled()`) AND `isRunAnalyzeCfwEnabled()` both gate the button, read at bootstrap, so a full reload is needed after a flag edit. A worktree's `dev-lazy` bundle can be stale vs HEAD (verify the served button label before using it as a baseline). The ns-selector dropdown often needs two clicks after reload. Real CLOSE needs the results panel, so with `/analyze` 403 dispatch CLOSE by hand. `mkdir -p /tmp/claude` before redirecting background logs there.
+- Background sub-agent `$TMPDIR` is per-sandbox: a log written unsandboxed lives under `/var/folders/.../T/`, not the sandbox `$TMPDIR` (grep found "No such file"). Use `/tmp/claude/` for logs you need to read back.
+
+## nginx rewrite: variables NEVER interpolate in the PATTERN (2026-10-06, ENG-1335119)
+- `rewrite ^/mf/shell/$http_x_npe_env(/.*)$ /$1 last` compiles `$http_x_npe_env` as a literal in the pattern — never matches, silently falls through to the next rewrite. Variables work only in the REPLACEMENT.
+- Fix: match the SHAPE statically (`^/mf/shell/(npe-[a-zA-Z0-9_-]+)(/.*)$ $2 last`) when the value is prefix-constrained — no real path segment shares the shape.
+
+## nginx if-trap: if-true requests run in a virtual nested location WITHOUT the enclosing try_files (2026-10-06)
+- `if ($header) { rewrite <shape>; }` + `try_files ... @fallback` in one location: when the if condition is TRUE but the inner rewrite pattern misses, nginx serves from the if's virtual location with NO try_files and NO named-location fallback — a header-bearing canonical path 404s with no SPA fallback. Worse than the docs' "if is evil" warning.
+- Fix: drop the `if` entirely when a static pattern alone can discriminate (env-shape regex). Verified with a local harness: `nginx -t` on a wrapper conf + stub root + sed-patched log/root paths + curl probe matrix (16 cases, incl. canonical-with-header cases).
+
+## ALB ingress group.order: lowest evaluated FIRST, first-match-wins — sidecar env-prefixed rules must sort BELOW mainline (2026-10-06, PR webui2#3251)
+- A mainline plain `/mf/shell` Prefix rule (pathType Prefix → `/mf/shell*`) matches env-prefixed `/mf/shell/<env>/...` too, so sidecar rules at HIGHER order never receive traffic. Semantics per AWS: "Rules with lower order value are evaluated first" (aws containers blog).
+- Fix pattern: renumber mainline up (shell 1→10, frame 2→11 via a values-driven offset knob in the frame template) and put sidecar rules BELOW (5/6). Pre-deploy check: verify no other service's Ingress in the same group holds those orders.
+
+## zsh backticks inside `gh pr create --body "..."` execute as command substitution (2026-10-06)
+- Body text containing `` `group.order` `` inside double quotes → zsh ran it as a command ("command not found: group.order"), silently stripping the text from the body ("lowest--first"). PR still created.
+- Fix: always `gh pr create --body-file <file>` (Write tool first). Body repair afterwards: `gh api -X PATCH repos/<o>/<r>/pulls/<n> -F body=@<file>` (plain `gh pr edit` still blocked by missing read:project scope).
+
+## openspec validate + helm/nginx local verification recipe for chart+conf changes (2026-10-06)
+- helm: fetch chart dep unsandboxed (`helm dependency update`, artifactory not sandbox-reachable), render sidecar values by `sed "s/{{ SUFFIX }}/npe-pr-42/g" template > values.yaml`, `helm template` with per-cluster values; prove template-inertness by rendering old-values+new-template vs the pre-change baseline render (`diff` → IDENTICAL).
+- nginx: wrapper conf (`events{} error_log /dev/stderr; http{ access_log /dev/stdout; include <default.conf>}`), sed-patch `/var/log/nginx/access.log` and `root` to local paths (container-only paths fail -t), `nginx -c` + curl matrix, `nginx -s stop`.

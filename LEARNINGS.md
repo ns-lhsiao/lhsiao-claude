@@ -487,3 +487,11 @@ Topical reference. Each entry links to a knowledge file.
 ## `openspec init` inside a fresh repo worktree (2026-10-06)
 - `openspec init` EPERMs writing `~/.config/openspec/config.json` under the sandbox — bypass sandbox. It also rewrites the repo's TRACKED `.claude/commands/opsx/*.md` + `.claude/skills/openspec-*/SKILL.md` (scaffolding churn) — `git checkout -- .claude/` before commit (needs sandbox bypass again: unlink EPERM on `.claude/skills`).
 - `openspec` CLI in-worktree also needs care: `openspec list` fails if only `openspec/config.yaml` exists (no changes/ dir) — run `openspec init` once to scaffold `changes/` + `specs/`.
+
+## Dark-mode validation must pixel-verify the screenshot, not trust the token assertion (2026-10-06, PR #145)
+- A dark-mode cypress case asserting "one token element flips" passed while the page body stayed WHITE: the TopBar flipped but the content container was transparent-over-white with default black text. Assert EVERY surface (header + page container), and pixel-verify the produced PNG (`PIL` sample center column: `sum(white_rows)` vs `sum(dark_rows)`) — a passing computed-style assertion can coexist with a mostly-light page.
+- Real gap found: `NewEdgeExpressConnectHome` container had no bg/text classes → fixed with `bg-neutral-bg-base text-neutral-text`. Below-content viewport whitespace stays white — body background is the shell's, not the MFE's.
+- `@netskope-ui/tailwind` 2.8 `darkColors.json` values are THEMSELVES `var(--token, darkHex)` — injecting them verbatim under `.dark-theme` is a self-referential CSS var cycle (no-op). Strip to the hex fallback: `value.match(/#[0-9a-fA-F]{6,8}/)`.
+- jest-plugin eslint rules fire on cypress spec files once they become modules (`export {}` or an import): `jest/valid-expect` on chai `.to.not.eq`, `jest/no-export` on `export {}`. Precedent (mf-cfw): top-of-file `/* eslint-disable jest/valid-expect */` etc.
+- cypress `run --spec X` WIPES the screenshots dir of other specs — copy PNGs out after EVERY run, or run all needed specs in one invocation.
+- docshare replace flow: `publish <file> <same-shortcode>` rejects ("Use Replace File"); script `delete`/`list` parsers are broken (shortcode matched with leading `/`, list columns all `?`). Working recipe: parse homepage HTML rows for `/files/<id>/edit` → `POST /files/<id>/delete` (303) → publish same shortcode.

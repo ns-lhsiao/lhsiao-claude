@@ -43,6 +43,10 @@ mcp.json
 !skills/mf-cfw-playwright/
 !skills/mf-cfw-playwright/SKILL.md
 # .env in mf-cfw-playwright contains credentials — stays ignored by default
+!skills/live-regression-sweep/
+!skills/live-regression-sweep/**
+# .env in live-regression-sweep contains tenant credentials — re-ignore after the ** whitelist
+skills/live-regression-sweep/.env
 !skills/ngs-ticket-creator/
 !skills/ngs-ticket-creator/**
 !skills/cm-ticket-creator/

@@ -46,3 +46,8 @@
   string field with no `@` expansion; `-F` is the typed field that reads `@file` / `@-` (stdin).
   Most robust for multi-KB markdown bodies: build `{"body": "..."}` with `python3 -c "import json,…"`
   and pass `--input <file>`, then always verify with `--jq '.body | length'` before moving on.
+- **Re-check PR state immediately before pushing a follow-up commit to an existing PR branch.** 2026-09-28: `gh pr view 3010` said OPEN at the start of the session; the user squash-merged it ~15 min later while I was still validating. I pushed the follow-up 3h after the merge onto the now-closed PR's branch and PATCHed its body — commit never reached master, and I only noticed when the user asked "PR 還開著嗎?". Rule: run `gh api repos/<o>/<r>/pulls/<n> -q '.state,.merged'` in the SAME Bash call as `git push`, and abort the push if `merged=true` — open a new branch from origin/master + `git cherry-pick` instead.
+
+## Local HTML reports: embed screenshots by relative path, not pr-screenshots URLs (2026-10-08)
+- A boot-bugfix report embedding `github.com/netSkope/pr-screenshots/raw/...` images showed nothing when opened locally (private repo, cross-site, no session) — user: "html screenshots 看不到".
+- Fix: copy the PNGs next to the report (`all-html/<project>/screenshots/<slug>/`) and use relative `src`; keep the github.com raw URLs only in the PR body.

@@ -123,3 +123,10 @@
   for the one URL. eslint `no-param-reassign` bans `config.adapter = ...` — spread a new config instead.
   Fixture honoring offset/sortby/jql makes pagination/sort/filter genuinely interactive in the browser with no
   tenant and no MSW (mf-cfw's MSW dev-server race makes it unreliable; see knowledge/mf-cfw.md).
+- **SonarQube `typescript:S4624` (nested template literals) is a MAJOR smell that alone flips webui2's quality gate to ERROR on `new_maintainability_rating`.** 2026-09-29 (PR #3039): `` `${name}${loc ? ` - ${loc}` : ''}` `` — a template inside a template's `${}`. Build optional-suffix labels as `[name, loc ? `- ${loc}` : null, day ? `(${day})` : null].filter(Boolean).join(' ')` (templates only inside the ternaries, never inside another template). Check with `bash ~/.claude/skills/sonarqube-debug/scripts/sq-issues.sh netSkope/<repo> <pr> ALL` — creds now live in `~/.claude/connections/sonarqube.json` with `project_key_template: "ngweb-{repo}"`. Also: a red "SonarQube Scan" check-run whose log says `scan did not succeed (result: cancelled)` is just a superseded run (concurrency cancel from a newer push), not a gate failure.
+
+## mf-cfw / Periskope gotchas from ENG-1338904 (2026-10-08)
+- `@netskope-ui/side-panel-v2` 1.2 `topOffset` only sets `top` on the fixed drawer; it stays `h-full`, so the bottom `topOffset` px fall below the viewport. Size panel content `calc(100% - offset)` yourself (NetworkLocation/DNS consumers carry the same latent bug).
+- CRA jest treats EVERY file under `__tests__/` as a suite — a shared fixture there fails "must contain at least one test". Put fixtures in `__fixtures__/` (and import types via `~/` alias; relative parent imports are lint errors outside test files).
+- In a suite that mocks axios, `jest.requireActual('@netskope-ui/utils')` crashes at load (`C.default.create is not a function`). Mock only the used export: `jest.mock('@netskope-ui/utils', () => ({ useFeatureFlag: () => mockFF() ?? DEFAULT }))` (the `??` default survives CRA resetMocks).
+- Backend may list one `policy_id` in several Analyze categories — never use policy_id alone as a finding identity (use `category:policy_id`).

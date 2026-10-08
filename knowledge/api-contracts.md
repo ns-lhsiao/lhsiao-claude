@@ -18,6 +18,7 @@
 - **`POST /rest/api/3/search` is removed** — use `/rest/api/3/search/jql` (same body).
 - **Jira `assignee` on create gets overridden** by component default assignee. Always follow create with `PUT /rest/api/3/issue/<KEY>/assignee -d '{"accountId":"..."}'` (HTTP 204).
 - **QA Test Recommendations field** is `customfield_12503`, accepts ADF doc (not plain text). Discover field IDs with `GET /issue/<KEY>?expand=names`.
+- **Root Cause Analysis field** is `customfield_11701` (ENG project). Schema says `textarea` but **rejects plain string** (`400 Operation value must be an Atlassian Document`) — send ADF `{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":...}]}]}`. Find it via `GET /issue/<KEY>/editmeta` grep `root|cause` in field names.
 - **CM `security` field** can't be set on create ("not on appropriate screen"). Omit it.
 - **CM `customfield_16792` (Type of Change)** is a cascading select: `{"id":"PARENT","child":{"id":"CHILD"}}`. Software > Feature Flag = `13191` / `28422`.
 - **Atlassian MCP fallback to curl**: tools may not be exposed even when `mcp.json` configures the server. Use `curl -s -u "USER:TOKEN" "https://SITE/rest/api/3/..."`. Env vars: `ATLASSIAN_API_TOKEN`, `ATLASSIAN_USER_EMAIL`, `ATLASSIAN_SITE_URL` (NOT `ATLASSIAN_EMAIL`/`ATLASSIAN_SITE`).
@@ -38,3 +39,6 @@
 - Ticket screenshots are often the decisive evidence (a DevTools network capture on ENG-1277661
   contained the exact API response body that confirmed root cause), so this path is worth getting
   right the first time rather than avoiding.
+
+## mcp.json Atlassian env key names (2026-10-08)
+- Guessing `JIRA_USERNAME`/`JIRA_API_TOKEN` read None → every `/rest/api/3/issue/*` returned 404 (anonymous, not 401). Real keys in `~/.claude/mcp.json` → `mcpServers.atlassian.env`: `ATLASSIAN_SITE_URL`, `ATLASSIAN_USER_EMAIL`, `ATLASSIAN_API_TOKEN`.

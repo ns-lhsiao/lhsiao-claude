@@ -521,3 +521,19 @@ Topical reference. Each entry links to a knowledge file.
 
 ## actionlint flags self-hosted runner labels as unknown (2026-10-08)
 - `actionlint` on webui2 workflows errors `label "arc-default-ub22-s-set" is unknown ... available labels are "ubuntu-latest"...` (exit 1) for every self-hosted-label job — config noise, not a defect. All real findings still surface alongside; either ignore the label complaints or add an actionlint.yaml `runner-label` config.
+
+## Jira ENG customfield_11701/12500 accept ADF despite editmeta "string" textarea (2026-10-08)
+- editmeta reports RCA (customfield_11701) + Fix Description (customfield_12500) as type string/textarea, but the issue POST/PUT with an ADF document returned 204 and readback confirmed the rendered content — no "Operation value must be an Atlassian Document" 400, no plain-text fallback needed. Send ADF first on this field family; fall back to plain string only if actually rejected.
+
+## MSW answers balkan_features_enabled in the webui2 hybrid dev stack — dual-mount React-vs-element resolves from the local fixture (2026-10-08, ENG-1346771)
+- webui2-angular-shell-devbox: the browser's `/api/v2/ui/platform/featureflags/balkan_features_enabled` fetch is intercepted by MSW from `apps/shell/src/mocks/fixtures/ns-config.json` (2-key map), NOT the QA tenant — `resolvePageVariant` then fails safe to the element variant and `<client-configuration-custom-element>` times out ("Page failed to load" + TanStack Router footer).
+- `playwright-cli route <pattern> --body ...` (context.route, network layer) never sees the request: MSW's service worker intercepts inside the page BEFORE the network. `route`/`route-list`/`unroute` verbs work and routes persist across reloads — but only for URLs MSW does not handle.
+- Fix: TEMP-edit the fixture's `balkan_features_enabled` var_value to add the per-page rc key (e.g. `balkan_phase2_client_configuration_enabled`), `sessionStorage.removeItem('balkan_pages')` + reload — React variant mounts; revert the fixture before commit.
+- Corollary: `~/.claude/tenants.json` `api_token` Bearer curl against the tenant URL returns a DIFFERENT tenant's map (full batch0-5 + phase2 set) than the browser session's tenant (lhsiao.qa01's own map has only 2 rc keys) — never treat the api_token answer as "this tenant's" flag map.
+
+## vitest 4 CLI coverage flags use dot syntax; instrumented runs need a higher testTimeout (2026-10-08)
+- `pnpm vitest run ... --coverageReporters=json` → CACError `Unknown option '--coverageReporters'`. Dot syntax works: `--coverage.enabled --coverage.reporter=json --coverage.include='<file>'` (repeat --coverage.include per file).
+- Coverage-instrumented heavy suites exceed the default 15s per-test timeout (unrelated tests like ClientConfigurationPage search-cap time out) — pass `--testTimeout=45000`; the same suite non-instrumented stays green at default timeout.
+
+## Bare `//` comments inside a JSX block render as TEXT nodes (2026-10-08)
+- `// comment` lines placed inside a `return (...)` JSX block become literal text in the DOM (leak into `container.textContent`; a `.not.toMatch(/x/)` textContent assertion catches it). Use `{/* ... */}` inside JSX or move the comment above the return.

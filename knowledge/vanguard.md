@@ -82,3 +82,34 @@
 - Local venv without `--extra visual` fails `tests/unit/visual/test_judge_plumbing.py` (anthropic)
   and mypy on `visual/judge.py`; `tests/unit/nightly_dashboard` needs jinja2 after #1460. Both
   unrelated to branch work; CI installs `--all-extras`.
+
+## webui2 flag-table mirrors: ClientConfigFlags + FF_REQUIRES_CF (2026-10-12, PR #1611)
+
+vanguard mirrors webui2's flag gates in TWO places that must move together with webui2 changes:
+
+1. **`ClientConfigFlags`** in `tests/client/client_configuration_tenant_fixtures.py` — mirrors
+   webui2 `useClientConfigFlags.ts` SPECS (per-row `flags.gated(ff, control_name=cf)`; FF/CF
+   defaults from webui2 `types/defaultFlags.constants.ts` + `Admin_userdata_model.php`). Drives
+   the `require_*` skip fixtures (pytest instantiates same-scope fixtures in argument order, so
+   the skip fires before tab-opening fixtures time out). Unit-pinned by
+   `tests/unit/fixtures/test_client_config_flags_mirror.py` (stub `_StubShellFlags`).
+2. **`FF_REQUIRES_CF`** in `src/vanguard/provisioner/flag_dependencies.py` — FF→CF edges; the
+   seeder (`seeding/seeders/feature_flags.py`) runs `resolve()` over the manifest's `flag_scope`
+   areas (`flag_defaults.py` `LICENSE_FLAG_GROUPS`) and `control_flag_repo.set_multiple(cfs)`
+   BEFORE the FFs (CF = MP-level `ws_control_flags`, set via DB `--db-host`; nightly seed step
+   passes `DB_PASSWORD` env). Doc source: `specs/22-feature-flag-reference.md` "Dependencies"
+   table — sync it when adding edges.
+
+ENG-1346771 (webui2 PR #3366) added the `secureAccess` license conjunct to
+vdiSupport/npaClientAllowDisable/npaDisable/npaZoneSelection; vanguard PR #1611 mirrored it in
+both places + `require_prelogon_config` gained `secure_access` (NPA/IS pair's NPA half was always
+license-gated; headers already claimed it). Nightly `client_configuration` manifest
+(`src/vanguard/seeding/manifests/client_configuration.yaml`) scopes `flag_scope: [client_configuration]`.
+
+vanguard PR CI has a **`webui2-drift-hold`** check — a drift gate against webui2 that would catch
+future mirror lag; watch it when webui2 flag gates change.
+
+Commit convention: conventional commits with product-area scope (`fix(client-config): ...`,
+`fix(nightly): ...`) — NOT `ENG-NNN:` prefixed (unlike webui/mf-cfw). Ticket key goes in the
+subject parenthetically. No PR template. `core.hooksPath=.githooks` (structural lint, stdlib-only
+— does NOT run ruff; lint.yml CI does).

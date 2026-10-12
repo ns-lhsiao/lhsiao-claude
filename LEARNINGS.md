@@ -418,6 +418,11 @@ Topical reference. Each entry links to a knowledge file.
 
 ## Stash-baseline proof for pre-existing test/typecheck failures (2026-10-05)
 - To prove a failing test/typecheck error is pre-existing and not caused by the diff: `/usr/bin/git stash push -u -m "<unique-tag>"`, run the failing check, `/usr/bin/git stash apply <sha>` (find sha via `git stash list --format='%H %gs' | grep <tag>`), then `git stash drop 'stash@{0}'` after confirming the printed SHA matches. Used twice in one session (4 TS2589 phantoms + 1 detail-processing test) — turns "I think it's pre-existing" into evidence for the PR body.
+- Variant (2026-10-12, vanguard PR #1611): proving new tests FAIL WITHOUT the fix — stash ONLY the source files, never `push -u` the whole tree: untracked test files get stashed too, the run collects 0 of the new tests, and "no failures" masquerades as a clean baseline. Correct form: `git stash push -m "<tag>" -- <src files only>`, run, `apply <sha>`, drop.
+
+## `gh pr create --reviewer` wants GitHub logins, not email prefixes; resolve from commit history (2026-10-12)
+- `gh pr create --reviewer rdecastrosilva` (email prefix from `git log --format='%an <%ae>'`) created the PR fine but failed the reviewer step: `GraphQL: Could not resolve user with login 'rdecastrosilva'`. Netskope logins carry an `ns-` prefix invisible in git email data.
+- Resolve real logins from the repo's own commit metadata: `gh api "repos/<o>/<r>/commits?path=<touched-file>&per_page=10" --jq '.[].author.login'`, then `gh api -X POST repos/<o>/<r>/pulls/<n>/requested_reviewers -f 'reviewers[]=<login>'`. Verify with `gh pr view <n> --json reviewRequests`.
 
 
 ## Deferred-promise jest mocks + chained `expect().rejects` re-invoke the fn; second call gets undefined (2026-10-05)

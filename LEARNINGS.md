@@ -542,3 +542,15 @@ Topical reference. Each entry links to a knowledge file.
 
 ## Bare `//` comments inside a JSX block render as TEXT nodes (2026-10-08)
 - `// comment` lines placed inside a `return (...)` JSX block become literal text in the DOM (leak into `container.textContent`; a `.not.toMatch(/x/)` textContent assertion catches it). Use `{/* ... */}` inside JSX or move the comment above the return.
+
+## playwright-cli refs go stale between invocations; drive by role/text selector instead (2026-10-12)
+- Consecutive `playwright-cli` verbs (`fill`/`click`/`check 'ref=eNN'`) fail "Ref not found in the current page snapshot" even when the ref came from a snapshot seconds ago — refs from `snapshot > file` output (or any prior invocation) don't register with the next verb. Stable selector forms that survive across invocations: `'#username'` id selectors, `'button:has-text("...")'`, and the positional form `'role=checkbox[name="..."]'` / `'role=button[name="Save"]'` / `'role=spinbutton[name="..."]'` (there is no `--ref` flag; the positional role form is the reliable one).
+- Also: ConfigModal-style red validation errors ("Select a target", field min errors) do NOT appear in the a11y yaml snapshot — take a `screenshot` and view the PNG to confirm validation errors rendered; the yaml can look clean while the screenshot shows blocking errors.
+
+## Vitest in a worktree with node_modules symlinked from the primary: `.vite-temp` write EPERMs under the sandbox (2026-10-12)
+- Fresh webui2 worktree with `node_modules` → primary checkout: `pnpm vitest run` fails at config load, `EPERM ... open apps/shell/node_modules/.vite-temp/vitest.config.ts.timestamp-*.mjs` — vite writes its bundled config through the symlink into the PRIMARY checkout's node_modules, which is outside the sandbox write allowlist. Run vitest unsandboxed whenever node_modules is symlinked across checkouts.
+- Same session, port collisions: an unrelated next-server held 3000 and a healthy ms-webui already held 8080 — reuse the live 8080 (healthz check) and let Vite auto-bump to 3001; read the `Local:` line from the vite log for the real port.
+
+## OrbStack docker socket is sandbox-blocked; `docker ps` needs sandbox disabled, colima start needs 3+ min (2026-10-12)
+- Sandboxed `docker ps` fails `permission denied ... /Users/lhsiao/.orbstack/run/docker.sock` — the OrbStack socket isn't in the sandbox allowlist (colima's `~/.colima` also EPERMs). Unsandboxed docker works fine and may show containers already up (mariadb Up 5 days) — check before booting anything.
+- `colima start` exceeded the 180s foreground timeout and moved to background; it finished on its own. Don't assume timeout = failure; `docker ps` again after the notification.

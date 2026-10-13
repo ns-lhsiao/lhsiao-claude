@@ -554,3 +554,8 @@ Topical reference. Each entry links to a knowledge file.
 ## OrbStack docker socket is sandbox-blocked; `docker ps` needs sandbox disabled, colima start needs 3+ min (2026-10-12)
 - Sandboxed `docker ps` fails `permission denied ... /Users/lhsiao/.orbstack/run/docker.sock` — the OrbStack socket isn't in the sandbox allowlist (colima's `~/.colima` also EPERMs). Unsandboxed docker works fine and may show containers already up (mariadb Up 5 days) — check before booting anything.
 - `colima start` exceeded the 180s foreground timeout and moved to background; it finished on its own. Don't assume timeout = failure; `docker ps` again after the notification.
+
+## Container jobs default `run` to `sh -e`; a standalone workflow must set its own shell (2026-10-12, webui2 PR #3430)
+- webui2 `sidecar-cleanup-aws.yaml` (job with `container:`, no `shell` anywhere) failed `Syntax error: redirection unexpected` at `mapfile -t X < <(jq ...)`; log header showed `shell: sh -e {0}`. Fix: workflow-level `defaults.run.shell: bash`. Later steps (`set -o pipefail`, `[[ ]]`) would have failed too.
+- Misdiagnosis to avoid: I first blamed reusable-workflow `defaults` not being inherited, from the ngweb-actions copy I happened to have open. The failing run was webui2's OWN workflow. Before theorizing, identify which workflow file produced the run: `gh run view <id> --json workflowName,headSha`, then read that file at the run's ref via `gh api contents?ref=`.
+- Local repro of a CI bash script: macOS `/bin/bash` is 3.2 (no `mapfile`) and `sh` is bash in POSIX mode (different error text than dash). Use `/opt/homebrew/bin/bash` (5.x) for the "works" side, and extract the real `run:` block from the YAML with PyYAML rather than retyping it.

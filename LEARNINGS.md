@@ -365,6 +365,13 @@ Topical reference. Each entry links to a knowledge file.
 ## rtk-compressed `git show <file>` output has FAKE line numbers/truncation (2026-10-01, mf-cfw PR 506)
 - `git show origin/qa01:src/.../NetworkLocationAddEdit.test.tsx | sed -n '440,600p'` under the rtk hook returned a COMPRESSED rendering that looked like the file ended ~line 600, while the real file is 1418 lines; `grep -n` on the on-disk worktree file gave true structure. Cost: misdiagnosed describe order and missed the mockImplementation-swapping tests that only appear past line 958.
 - Fix: for structural reads of any file under rtk, read the on-disk copy (Read tool / `/usr/bin/sed` on the checked-out file), never `git show` output.
+- Same class, opposite direction (2026-10-13, webui2 ENG-1209514): after `git apply --3way` printed
+  "Applied patch ... cleanly" x6, BOTH `git status` and `git diff --stat` showed a CLEAN tree while
+  the files were in fact modified (verified by python read of the file content). rtk's compressed
+  status/diff renderings can lie about worktree state, not just file contents. Ground-truth check
+  for "did my change land": python `open(path).read()` + substring check, never rtk-piped git
+  status/diff/grep output. (The `grep -c "send null to clear"` 0-match was the known quote-mangling
+  trap firing again.)
 
 ## CRA (react-scripts) jest default `resetMocks: true` silently wipes `jest.fn(impl)` creation-time implementations (2026-10-01, mf-cfw PR 506)
 - react-scripts' createJestConfig defaults include `resetMocks: true` (line ~68) and the repo's package.json `jest` block didn't override it. Every `jest.fn((fn) => (e) => ...)` whose implementation was set at mock CREATION returns `undefined` inside tests: component received `onClick={undefined}`, save clicks silently no-op'd, "Number of calls: 0". Tests setting `mockImplementation` INSIDE the test body keep working — only creation-time impls die.
@@ -530,6 +537,8 @@ Topical reference. Each entry links to a knowledge file.
 ## Jira ENG customfield_11701/12500 accept ADF despite editmeta "string" textarea (2026-10-08)
 - editmeta reports RCA (customfield_11701) + Fix Description (customfield_12500) as type string/textarea, but the issue POST/PUT with an ADF document returned 204 and readback confirmed the rendered content — no "Operation value must be an Atlassian Document" 400, no plain-text fallback needed. Send ADF first on this field family; fall back to plain string only if actually rejected.
 
+- **Addendum (2026-10-13, ENG-1354805):** `customfield_12500` (Fix Description) is NOT on every ENG issue's edit screen — the field exists globally but the screen scheme decides per issue type. Staging a 12500 payload without checking the ticket's editmeta for that field first ends in HTTP 400 "not on the appropriate screen". Check editmeta for 12500 presence BEFORE staging; RCA (11701) has been settable on every ENG ticket so far. Blocked fix text can be parked at /tmp/claude/<key>-update.json for retry after a Jira admin adds the field to the screen.
+
 ## MSW answers balkan_features_enabled in the webui2 hybrid dev stack — dual-mount React-vs-element resolves from the local fixture (2026-10-08, ENG-1346771)
 - webui2-angular-shell-devbox: the browser's `/api/v2/ui/platform/featureflags/balkan_features_enabled` fetch is intercepted by MSW from `apps/shell/src/mocks/fixtures/ns-config.json` (2-key map), NOT the QA tenant — `resolvePageVariant` then fails safe to the element variant and `<client-configuration-custom-element>` times out ("Page failed to load" + TanStack Router footer).
 - `playwright-cli route <pattern> --body ...` (context.route, network layer) never sees the request: MSW's service worker intercepts inside the page BEFORE the network. `route`/`route-list`/`unroute` verbs work and routes persist across reloads — but only for URLs MSW does not handle.
@@ -566,6 +575,15 @@ Topical reference. Each entry links to a knowledge file.
 ## Squash-merged branch: rebase replays dead commits — measure the net tree diff instead (2026-10-13)
 - Rebasing `pr/X` onto fresh origin/master after a PR's squash-merge hit conflicts replaying commits already in master in different shape; squash-merge gives no per-commit mapping.
 - Fix: `git diff origin/master..HEAD --stat` (tree comparison) is the true unmerged remainder. Branch off origin/master and merge/cherry-pick only that net diff — but first diff the old branch's copy of shared files against fresh master (the old branch may be missing newer master commits, e.g. #3423's re-homed job in cicd-pr.yaml; taking the old file verbatim would delete them).
+- Follow-up-fix carry recipe (2026-10-13, ENG-1209514 → PR #3448): `git diff > fix.patch` (tracked)
+  + `tar czf` the untracked openspec archive dir on the OLD branch, `git stash push -u` to clear the
+  tree, `checkout -b <new> origin/master`, `git apply --3way fix.patch` + untar, re-run tests
+  (master may have MORE tests than the stale branch: 904 vs 895), commit, push, PR. Verify the
+  apply landed via python file read — see the rtk entry above.
 
 ## openspec archive mutates the tree after the fix commit — commit the archive move too (2026-10-13)
 - `openspec archive "<change>" --yes` moves `changes/<name>/` to `changes/archive/<date>-<name>/` and writes `openspec/specs/<cap>/spec.md` — all uncommitted after the fix commit lands. `git add` all three paths (deleted old dir, archive dir, new spec) and push, else the PR loses the archived artifacts and the merged spec delta.
+
+## `git stash push -u` steals untracked node_modules symlinks; branch switch then breaks vitest with "Tsconfig not found" (2026-10-13)
+- In a webui2 worktree whose root `node_modules` + `packages/{api,shared-types,migrations-review}/node_modules` are UNTRACKED symlinks to the primary checkout (they show as `??` in git status), `git stash push -u` (needed to switch branches with a dirty tree) stashes the symlinks away too. After `checkout -b <new> origin/master`, `pnpm vitest run` fails en masse: `[TSCONFIG_ERROR] Failed to load tsconfig for '../../packages/api/src/msw.node.ts': Tsconfig not found` — the per-package node_modules are gone even though apps/shell's (gitignored, not `??`) survives.
+- Fix: recreate the symlinks after the switch with ABSOLUTE targets (`ln -sfn /Users/lhsiao/ns/git/balken/webui2/packages/api/node_modules packages/api/node_modules`, one per package + root), then re-run. Alternatively avoid `stash -u` when the tree's untracked set includes node_modules — capture a patch + tar of the real artifacts instead and `checkout -f`.

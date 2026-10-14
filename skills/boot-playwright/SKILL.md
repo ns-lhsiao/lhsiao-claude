@@ -44,6 +44,11 @@ dev-stack flavors. This file owns everything that does NOT vary by environment;
 - `<slug>` is the kebab-case feature descriptor shared with the worktree triad
   (see the base recipe). Reused as the `playwright-cli` session name unless the
   recipe says otherwise.
+- **Live-tenant targets only:** when the validation target is a real tenant rather than a
+  local dev stack, run `/sweep-fit-check <tenant-url> <slug>` BEFORE loading the recipe.
+  Proceed on `GO`; on `GO-WITH-LIMITS` present the blocked cases and side effects and use
+  AskUserQuestion; on `STOP` do not proceed (name the flag/permission to change and ask for
+  another tenant). Skip entirely for local dev-stack recipes.
 - Read the named recipe file first. If it opens with a pointer to another recipe
   (the two MF-specific recipes point to `webui-angular-devbox.md`), read that one
   too, in order, before executing any setup steps.

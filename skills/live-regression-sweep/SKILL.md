@@ -58,6 +58,17 @@ Never in args, files that are tracked, reports, screenshots, or logs.
 - After every run run `scripts/check_report.sh <report-dir>`; it greps for the password
   and for broken `<img>` links.
 
+## Phase -1 — Fit check (first use of a page)
+
+For each requested page, run `/sweep-fit-check <tenant-url> <slug>` first when the page
+file is missing or its `last_verified` is older than 60 days (skip with `--skip-fit`, or
+when the page file is fresh and the last verdict was not `STOP`). Follow its gate:
+`STOP` never proceeds (even with `--yes`); `GO-WITH-LIMITS` needs an AskUserQuestion naming
+the blocked cases, untested roles and irreversible side effects. Cases the fit check marked
+`BLOCKED` / `NEEDS-DESIGN` are recorded as such in the report, not scored as PASS. Accept the
+draft page file into `pages/` only after the user approves it. Phase 1 (source recon) is
+independent and still runs on its own triggers.
+
 ## Phase 0 — Preflight (you, not a sub-agent)
 
 1. Open ONE session, log in (see "playwright-cli rules"), then probe the renderer matrix:

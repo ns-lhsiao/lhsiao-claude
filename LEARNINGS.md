@@ -632,3 +632,22 @@ Topical reference. Each entry links to a knowledge file.
 - Cost: nearly misdiagnosed the webui2 rollout auto-deploy chain as dead ("labeled leg never fires" -> "whole chain broken") from total_count=0 on both webui2 and ms-webui. Ground truth: the labeled re-run DID fire — visible as a second `event: pull_request` pipeline run created seconds after the `labeled` timeline event (stamp at T, run batch at T+3s, old run cancelled by workflow concurrency), with `PR Sidecar Approval`/`PR Sidecar Decision` jobs SKIPPED (label in the event snapshot) and `Resolve Sidecar Suffix` reading the label live.
 - Fix: to find an action-specific run, filter `?head_sha=<sha>` (no event filter) and pick `max_by(.created_at)` among runs named like the workflow — the action re-run is always the newest. Distinguish an action re-run by its job set (skipped env-gate jobs), never by an `event=` query param.
 - Corollary: vanguard's wait-for-deploy poll (`runs?event=labeled&head_sha=`) can structurally never match — replaced with the head_sha + max_by form.
+
+## SonarQube scanner does NOT expand `{a,b}` brace patterns in sonar properties (2026-10-15, webui2 #3522)
+- `sonar-ngweb-webui2.properties` used `**/*.{test,spec}.{ts,tsx}` for test.inclusions /
+  coverage.exclusions / cpd.exclusions — the scanner echoes the braces verbatim in its log
+  (`**/*.{test, spec}.{ts, tsx}`) and matches NOTHING. Masked for years because every existing
+  webui2 test file lives in a `__tests__/` dir (covered by the separate `**/__tests__/**`
+  pattern) → master shows test files as UTS. First co-located `*.test.ts` outside `__tests__/`
+  landed as FIL source (0% coverage) and sank the new-coverage gate to 65.9%.
+- Fix: spell extensions out explicitly (`**/*.test.ts,**/*.test.tsx,...`). Same for the
+  S1313 hotspot: `1.1.1.1` in a test fixture is flagged; RFC 5737 documentation ranges
+  (`203.0.113.x`) are not.
+- Debug recipe: quality gate failures lie at the aggregate level — `/api/qualitygates/
+  project_status?pullRequest=` gives exact conditions; `/api/measures/component_tree?
+  pullRequest=` + `qualifiers=FIL` per-file shows WHICH files carry coverage; compare a
+  file's qualifier on PR view vs master (`/api/components/show`) to catch classification
+  bugs. Bearer auth works on sonarqube.netskope.io tokens; `Basic :token` intermittently 401s.
+- Also: GitHub Actions runs on a branch can be silently CANCELLED (both CI and SQ, no
+  superseding push) — `gh run rerun <id>` recovers; don't mistake a cancelled run for
+  a real failure.

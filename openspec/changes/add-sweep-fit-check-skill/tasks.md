@@ -23,4 +23,4 @@
 - [x] 4.1 Dry-run against `lhsiao.qa` using the Analyze page file; confirm no non-GET request and `Run Analyze` appears only under `side_effects`
 - [x] 4.2 Confirm the expected verdict (`GO-WITH-LIMITS`, `untested_roles` = [none], fixture-dependent cases `BLOCKED`; also verified STOP on entry-not-mounted, expired session and bad cookie file)
 - [x] 4.3 Run `live-regression-sweep/scripts/check_report.sh` on the output directory (no credential or cookie leak)
-- [ ] 4.4 Commit in `~/.claude` worktree, push, and open the PR
+- [x] 4.4 Commit in `~/.claude` worktree, push, and open the PR

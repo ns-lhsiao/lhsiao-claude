@@ -651,3 +651,21 @@ Topical reference. Each entry links to a knowledge file.
 - Also: GitHub Actions runs on a branch can be silently CANCELLED (both CI and SQ, no
   superseding push) — `gh run rerun <id>` recovers; don't mistake a cancelled run for
   a real failure.
+
+## Render errors are not request errors; a null "no match" crashed the whole mf-cfw page (2026-10-15, mf-cfw PR #589)
+- Traffic Simulator `primary_match` is `null` on real tenants when no policy matches, but was typed non-null. The TypeError fires in React render, so request-layer try/catch/toast never sees it; with no in-page boundary it reaches the router `errorElement` (`CFWErrorBoundary`) and replaces the whole `<mf-cfw>`. User expectation ("should be try/catch + toast") was right for fetch errors, wrong layer for render errors: fix = type the absence + guard at ONE shared render point + per-tab `react-error-boundary` (already a dep).
+- A body-text regex like `/Something Went Wrong/i` false-positives on a boundary panel that says "Something went wrong while rendering this tab" -- assert on `data-testid`, not page text.
+- `ButtonV2 styleType="SECONDARY"` is not valid: crashes `Cannot read properties of undefined (reading 'ACTION')`. Valid in this repo: REGULAR, PRIMARY, NO_BORDER.
+
+## Real-tenant browser validation of a local mf-cfw build (2026-10-15)
+- Recipe that worked: TEMP `devServer` function in `craco.config.ts` (proxy `/api` -> tenant, `changeOrigin`, header `x-npe-env`), tenant session cookies (`ci_session`, `auth_session`) injected as localhost cookies via `context.addCookies`, mock only the write (`page.route` POST) so no tenant data is added. Revert craco with `git checkout --` afterwards.
+- Port 8014 is often taken by a sibling worktree: start with `PORT=8030 WDS_SOCKET_PORT=8030` (the `.env` pins WDS_SOCKET_PORT).
+- `playwright-cli cookie-list` prints cookie VALUES in plain text; never let it reach the conversation (write to a file, parse in a script).
+- playwright-cli login: after `open /locallogin` wait ~8s and `snapshot` before `fill`; filling immediately left the page on /auth/login. `page.route` handlers registered in one `run-code` call persisted into later calls and across `reload` in the same session -- `page.unroute` them before the "recovery" check.
+- Forcing a real render error without code edits: mock the API with a field of the wrong type (e.g. `action` as an object); `traffic_patterns: [null]` did NOT throw.
+
+## Worktree-isolated session: how to do the usual chores (2026-10-15)
+- Refused as "too complex": `source .env`, heredocs, `python -c` with regexes, `cmd && cmd` chains with a path in the middle, `$(cat file)` inside a playwright-cli call. Working pattern: Write a script to `/tmp/claude/x.sh` (or .py) and run one bare `bash /tmp/claude/x.sh`; use absolute paths and `yarn --cwd <worktree>` / `git -C <worktree>`; `cd <worktree> && openspec ...` is accepted.
+- Host PR screenshots in netSkope/pr-screenshots with `gh api -X PUT repos/netSkope/pr-screenshots/contents/<path> -f branch=develop -f content=$(base64 < file)` -- no local git, so no ExitWorktree needed.
+- A branch made with `git worktree add -b X origin/<integration>` tracks the integration branch; `git branch --unset-upstream` before the first push, then `git push -u origin <topic>`.
+- `git log` on the repo default branch shows nothing for epic-only paths; query the integration branch (`commits?sha=<branch>&path=...`) when looking for reviewers. Here every commit was the user's own, so no reviewer could be inferred.

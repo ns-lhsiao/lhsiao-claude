@@ -33,6 +33,8 @@ mcp.json
 !skills/boot-troubleshoot/**
 !skills/boot-feature/
 !skills/boot-feature/**
+!skills/sweep-fit-check/
+!skills/sweep-fit-check/**
 !skills/boot-bugfix/
 !skills/boot-bugfix/**
 !skills/init-dev-env/

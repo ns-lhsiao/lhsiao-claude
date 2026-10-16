@@ -669,3 +669,29 @@ Topical reference. Each entry links to a knowledge file.
 - Host PR screenshots in netSkope/pr-screenshots with `gh api -X PUT repos/netSkope/pr-screenshots/contents/<path> -f branch=develop -f content=$(base64 < file)` -- no local git, so no ExitWorktree needed.
 - A branch made with `git worktree add -b X origin/<integration>` tracks the integration branch; `git branch --unset-upstream` before the first push, then `git push -u origin <topic>`.
 - `git log` on the repo default branch shows nothing for epic-only paths; query the integration branch (`commits?sha=<branch>&path=...`) when looking for reviewers. Here every commit was the user's own, so no reviewer could be inferred.
+
+## Figma MCP: screenshot curl needs sandbox off; View seat rate-limits fast (2026-10-16)
+- curl to www.figma.com/api/mcp/asset/* is denied by the sandbox proxy; adding allowed_domains still exited 56. Run the download unsandboxed.
+- A Figma View seat hit the MCP call cap after ~6 calls (4 screenshots + 1 design_context + 1 variable_defs). Budget calls: fetch screenshots first, then design_context on the 1-2 sub-trees that matter most.
+
+## Local IPv6 DNS flakiness kills the webui2 hybrid stack; fix with ipv4first (2026-10-16)
+- Mid-session the hybrid Vite server started failing every `/ns/` request: `[vite] Internal server error: fetch failed` (undici fetch of the QA tenant HTML). Bare `curl https://lhsiao.qa.boomskope.com/` returned `Could not resolve host` while `curl -4` worked (303) and `nslookup`/`dscacheutil` resolved fine — the host's IPv6 resolution/route went bad and curl/undici prefer IPv6. GitHub etc. resolved fine, so it looked host-specific.
+- Fix: restart the Vite dev server with `NODE_OPTIONS="--dns-result-order=ipv4first"`. Diagnose with `curl -4` vs bare `curl` + `--resolve` pin before blaming the tenant or the plugin.
+
+## webui2 `VITE_FORCE_FLAGS=true` forces flag DEFAULTS (often false) and shadows per-key overrides (2026-10-16)
+- `useFlag.ts` checks `DEV_FORCE_ALL` FIRST and returns `defaultValue ?? true` — for client-config zone flags the spec defaults are `false` (defaultFlags.constants), so force-all turned them OFF. It also returns before the `VITE_FLAG_OVERRIDES` branch, so the per-key list stops applying entirely.
+- Fix: never combine the two. Use `VITE_FLAG_OVERRIDES=key:true,...` with BOTH the raw FF name (`nplan3569_customer_zone_selection_enabled`) and the uppercase CF name (`NPLAN3569_CUSTOMER_ZONE_SELECTION_ENABLED`); leave `VITE_FORCE_FLAGS` unset.
+
+## webui2 hybrid stack: MSW answers platform flag endpoints from the ns-config fixture; seed overrides via localStorage (2026-10-16)
+- `platformFlagHandlers` (always active, even in hybrid proxy mode) serve `GET /api/v2/ui/platform/featureflags/:name` and `controlflags/:name` from `mocks/fixtures/ns-config.json`. The fixture had `nplan3569_customer_zone_selection_enabled: false`, so no env override on the Vite side changed what the app actually resolved.
+- Race-free browser-side override (handlers read it at module init, pre-boot): `localStorage.setItem('mock_flag_overrides', JSON.stringify({<flag>: true}))` BEFORE `reload`. Adjacent to the known `mock_balkan_rc_keys` seed. Verify with an in-page `fetch('/api/v2/ui/platform/featureflags/<name>')` probe before trusting picker visibility.
+
+## MSW mock gaps in webui2 client-config hid the zone-clear bug entirely (2026-10-16, ENG-1362658)
+- `gslbpopsHandler` served `data: []` → `GslbZoneSelect` returns `null` on an empty zones list → the picker NEVER rendered in any mock-backed run, regardless of flags. And `patchHandler` didn't merge zone fields → a zone clear could never round-trip. Two independent mock-fidelity gaps made the Default-clear path untestable and let the bug survive the feature's own validation.
+- TEMP fixes for the browser run (revert before commit): seed zones in `gslbpopsHandler` (`uuid`/`name`/`client_types: {swg, npa}`), seed `gslbZoneUUID`/`privateAccess.gslbZoneUUID` on a mock config, merge zone fields in `patchHandler` (RFC 7386-style). MSW handlers register at boot — HMR does NOT swap them; full `reload` required after editing a handler.
+- Patch-body capture: a `window.fetch` wrapper saw NOTHING (the app's HTTP layer holds its own fetch ref), and `page.route` never sees MSW-handled requests. Working capture: `console.warn(JSON.stringify(body))` inside the MSW handler + read the console log.
+- Follow-up worth doing: make the zone-serving gslbpops + zone-merging patchHandler permanent (widen `ClientConfigSummary` to carry zone fields).
+
+## OpenSpec change created in the primary checkout pre-worktree is invisible to archive from the worktree (2026-10-16)
+- `openspec new change` ran in the primary checkout (worktree didn't exist yet); later `openspec archive "<name>"` from the worktree failed `Change not found` (and from a subdirectory failed `No OpenSpec changes directory found` — openspec must run from the repo root).
+- Fix: `mv <primary>/openspec/changes/<name> <worktree>/openspec/changes/` (uncommitted scratch moves freely), then archive from the worktree root — spec delta lands in the worktree's tracked `openspec/specs/`, archive dir under `changes/archive/`, all committed with the fix.

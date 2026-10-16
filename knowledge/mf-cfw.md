@@ -38,3 +38,15 @@
   `pagepermissions` intercept never matches and all tests die in before-each. In CI those calls
   ENOTFOUND → app falls back to the legacy path the mocks target. Validate spec changes on CI, or
   stub the rbac_v3 flag off locally first.
+
+## `@netskope-ui/table` column order comes from `accessorKey`, not array order (2026-10-01)
+- Display-only columns defined with just `id` (no `accessorKey`) rendered AFTER all keyed columns
+  regardless of their position in `columns[]`: `getDefaultColumnOrder` maps `column.accessorKey`.
+  Fix: give every column an `accessorKey` (a display-only key like `source_criteria` is fine).
+- Sandbox gotcha: worktree under `~/ns/git/nplan6460/` is outside session cwd, so Bash writes there
+  EPERM (Edit/Write tools work). Unsandboxed Bash gets a DIFFERENT `$TMPDIR` than sandboxed, so a
+  script written to sandboxed `$TMPDIR` must be referenced by absolute path (`/tmp/claude-501/...`).
+
+## @netskope-ui/dates is unusable in mf-cfw; icons shadow-decl additions needed per new icon (2026-10-16)
+- `@netskope-ui/dates` 3.0 bundles a nested `@netskope-ui/core@8` whose `AngleRightIcon`/`XIcon`/etc. imports don't exist in icons 4.8 — webpack dev build fails with 7 "export not found" errors the moment anything from the package is imported. Jest passes (CJS build resolves differently), so run `yarn start:dev` (or build) before trusting a new @netskope-ui package. Workaround of record for Figma time ranges: a preset `@netskope-ui/select` ("Last 30 Days" etc.) feeding ISO `starttime`.
+- Same session: new icons (`GoToPolicyIconIcon`, `ShieldIcon`) require adding to `src/react-app-env.d.ts`'s shadow declaration (known TS2305 trap); `@netskope-ui/dropdown` items only mount after the trigger opens — tests must click the kebab trigger before querying items.

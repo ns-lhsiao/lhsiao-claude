@@ -695,3 +695,7 @@ Topical reference. Each entry links to a knowledge file.
 ## OpenSpec change created in the primary checkout pre-worktree is invisible to archive from the worktree (2026-10-16)
 - `openspec new change` ran in the primary checkout (worktree didn't exist yet); later `openspec archive "<name>"` from the worktree failed `Change not found` (and from a subdirectory failed `No OpenSpec changes directory found` — openspec must run from the repo root).
 - Fix: `mv <primary>/openspec/changes/<name> <worktree>/openspec/changes/` (uncommitted scratch moves freely), then archive from the worktree root — spec delta lands in the worktree's tracked `openspec/specs/`, archive dir under `changes/archive/`, all committed with the fix.
+
+## @netskope-ui/dropdown closes by UNMOUNTING menu content — reset menu-local UI state via an unmount-cleanup sentinel (2026-10-18)
+- AddCriteriaMenu's search reset on the trigger's `onClick` never fired on reopen (live repro: type, Escape, reopen — filter still applied). `Dropdown.Root` has no `onOpenChange`, but it unmounts its content children when closed, so a tiny `<ResetSearchOnClose reset={fn} />` rendered inside the menu whose `useEffect(() => reset, [reset])` cleanup fires exactly at close is the reliable reset point (state itself lives in the always-mounted parent).
+- Testing it needs a STATEFUL dropdown mock that actually unmounts content on toggle; nesting depth must come from React context — a module-level depth counter re-runs on re-render and mislabels the outer Root ("Found multiple elements by dd-outer-trigger").

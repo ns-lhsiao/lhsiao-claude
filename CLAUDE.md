@@ -205,42 +205,11 @@ Read @LEARNINGS.md
 
 ## Playwright / Browser Validation
 
-- **Confirm a testable target BEFORE driving Playwright.** If the feature under test is not
-  reachable on the current tenant/environment — a required feature flag is off (so webui serves
-  the legacy renderer instead of the fix), the tenant lacks the data/config, or no environment is
-  available — **PAUSE and ask the user** to either toggle the needed feature flag or name another
-  candidate tenant/environment that can fulfill the validation. Do NOT proceed to screenshot a page
-  that isn't actually exercising the change.
-- **Why**: 2026-07-31 (ENG-1152682) a full Playwright run captured the *legacy Angular* devices page
-  because `ng_devices_enabled` was off on the tenant — the React fix was never exercised, and the
-  report + PR had to be redone. Verify the correct renderer is mounted (e.g. via a renderer-specific
-  discriminator) before asserting.
+- **Confirm a testable target BEFORE driving Playwright.** If the feature under test is not reachable on the current tenant/environment (feature flag off, tenant lacks the data/config, no environment), **PAUSE and ask the user** — do not screenshot a page that isn't exercising the change. Full recipe + why (ENG-1152682 legacy-renderer capture): `knowledge/playwright.md` ("Confirm a testable target BEFORE driving Playwright"). Verify the correct renderer is mounted before asserting.
 
 ## Reading Private GitHub Pages
 
-- **`gh auth token` + curl does NOT work for a private `*.pages.github.io` URL.** Private Pages
-  sites authenticate via a **browser OAuth cookie** (`_gh_pages`, per-site session established
-  through the `github.com/pages/auth` flow), which is a different auth surface from the `gh` API
-  token. Curling with `Authorization: token $(gh auth token)` returns HTTP 200 but redirects to
-  `github.com/login?return_to=...pages/auth...` — you get the login page, not the content.
-- **Correct approach — real Chrome + user OAuth + CDP read:**
-  1. Launch a debug Chrome pointed at the target URL with a dedicated profile:
-     `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 "--remote-allow-origins=*" --user-data-dir=/tmp/chrome-gh-oauth --no-first-run --no-default-browser-check "<url>" &`
-  2. Have the **user** complete the GitHub OAuth once in that window (may chain Google→GitHub→authorize
-     on a fresh profile). Cookie persists to the profile's `user-data-dir` on disk.
-  3. Attach via CDP and read the DOM (`Runtime.evaluate` for `document.body.innerText`, links, etc.)
-     or screenshot. The cookie survives a Chrome restart on the **same** `--user-data-dir`.
-- **`--remote-allow-origins` is mandatory for CDP WebSocket.** Without it the `/devtools/page/<id>`
-  ws handshake returns `403 Forbidden — Rejected an incoming WebSocket connection from the
-  http://localhost:9222 origin`. In **zsh, quote the flag** (`"--remote-allow-origins=*"`) — a bare
-  `*` triggers `no matches found` globbing. If Chrome was already started without the flag, kill and
-  relaunch on the same profile (login is retained).
-- **No `ws`/`websocket-client` module?** macOS Python is externally-managed (PEP 668, `pip install`
-  blocked) and Node here lacks `ws`. Fastest fix: `python3 -m venv <dir> && <dir>/bin/pip install -q
-  websocket-client`, then connect with an explicit `Origin: http://localhost:9222` header on the ws.
-- **Why**: 2026-09-01 read an internal `bookish-robot-*.pages.github.io/analyzer` prototype this way
-  after `gh` token curl bounced to login. The org repo owning the Pages subdomain is not discoverable
-  by name (random `*.pages.github.io` slug ≠ repo name), so browser OAuth is the only reliable path.
+- **`gh auth token` + curl does NOT work for private `*.pages.github.io` URLs** (browser OAuth cookie, different auth surface — you get the login page). Full Chrome + user OAuth + CDP recipe (incl. `--remote-allow-origins` and venv/websocket-client setup): `knowledge/process.md` ("Reading Private GitHub Pages").
 
 ## Sensitive Data
 

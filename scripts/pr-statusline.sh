@@ -145,13 +145,17 @@ count_mcp_servers_enabled_total() {
     echo "$enabled/$total"
 }
 
-# Get git branch
+# Git repo? Non-git dirs still show model/context/MCP/cost info
+is_git_repo=true
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
-    echo "🤖 $model | 📂 $dir | ⚠️  Not a git repo"
-    exit 0
+    is_git_repo=false
 fi
 
-branch=$(git branch --show-current 2>/dev/null || echo "detached")
+if [ "$is_git_repo" = true ]; then
+    branch=$(git branch --show-current 2>/dev/null || echo "detached")
+else
+    branch=""
+fi
 
 # Check commits ahead/behind remote
 commit_status=""
@@ -198,11 +202,11 @@ if [ "$mcp_counts" != "0/0" ]; then
     mcp_display="MCP: $mcp_counts"
 fi
 
-# Format cost display
-cost_display=""
-if [ "$session_cost" != "0" ] && [ -n "$session_cost" ]; then
-    cost_display=$(printf "\$%.2f" "$session_cost")
-fi
+# Always show session cost ($0.00 before first API call)
+case "$session_cost" in
+    ''|*[!0-9.]*) session_cost=0 ;;
+esac
+cost_display=$(printf "\$%.2f" "$session_cost")
 
 # Build model info with context, MCP, and cost in parentheses
 model_info="🤖 $model"
@@ -245,7 +249,7 @@ if [ -f "$pr_cache_file" ]; then
     fi
 fi
 
-if [ "$use_cache" = false ]; then
+if [ "$use_cache" = false ] && [ "$is_git_repo" = true ]; then
     # Check if there's a PR for this branch
     pr_data=$(gh pr view "$branch" --json number,state,statusCheckRollup,reviewDecision,comments 2>/dev/null)
 
@@ -305,6 +309,10 @@ if [ "$use_cache" = false ]; then
 fi
 
 # Build output: fresh session data + cached PR data
-output="$model_info | 📂 $dir | 🌿 $branch$commit_status | $pr_section"
+if [ "$is_git_repo" = true ]; then
+    output="$model_info | 📂 $dir | 🌿 $branch$commit_status | $pr_section"
+else
+    output="$model_info | 📂 $dir | ⚠️  Not a git repo"
+fi
 
 printf '%s\n' "$output"

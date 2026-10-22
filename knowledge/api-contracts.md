@@ -42,3 +42,10 @@
 
 ## mcp.json Atlassian env key names (2026-10-08)
 - Guessing `JIRA_USERNAME`/`JIRA_API_TOKEN` read None → every `/rest/api/3/issue/*` returned 404 (anonymous, not 401). Real keys in `~/.claude/mcp.json` → `mcpServers.atlassian.env`: `ATLASSIAN_SITE_URL`, `ATLASSIAN_USER_EMAIL`, `ATLASSIAN_API_TOKEN`.
+
+## Confluence v2 page comments: read footer-comments with body-format=MARKDOWN (2026-09-30)
+- Fetching a comment thread anchored on a modern Confluence page: `/wiki/rest/api/content/{pageId}/comment` returns 404 (v1 API doesn't see v2 pages); `/wiki/api/v2/pages/{id}/comments?commentId=...` returns an HTML error page (wrong/legacy shape); `/wiki/api/v2/comments/{id}` returns 400; `body-format=export_view` is rejected (`PrimaryBodyRepresentation is one of [STORAGE, ATLAS_DOC_FORMAT, MARKDOWN]`).
+- Working recipe: `GET /wiki/api/v2/pages/{pageId}/footer-comments?limit=50&body-format=MARKDOWN` (Basic auth via mcp.json Atlassian creds) — returns markdown bodies incl. tables. A `focusedCommentId` URL param on a `#comment` link maps to one of these footer-comment ids; fetch the whole thread and read the replies for alignment decisions.
+
+## Jira REST v3 GET issue 404s for some tickets; v2 works (2026-10-20)
+- `GET /rest/api/3/issue/ENG-1369097` returned 404 "Issue does not exist or you do not have permission" with valid Basic auth (mcp.json `atlassian` env keys: `ATLASSIAN_USER_EMAIL` + a `*_TOKEN` — not `JIRA_EMAIL`). Same ticket via `/rest/api/2/issue/...` returned 200 with all fields. Don't conclude "ticket missing" from a v3 404 — retry v2.

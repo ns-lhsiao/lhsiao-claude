@@ -17,11 +17,16 @@
 - **`aria-disabled` doesn't trigger CSS `:disabled`**. ntskui's Checkbox/Select/Combobox triggers render as `button[role=checkbox]` with `aria-disabled="true"`, NOT the HTML `disabled` attribute. Tailwind's `disabled:` variants don't match. Apply `opacity-50 cursor-not-allowed` to your wrapping container. Test trap: `toBeDisabled()` may not fire — assert `el.getAttribute('aria-disabled') === 'true'`.
 - **`lodash.debounce(fn, ms)` defers ALL side effects in the body, including loading-flag flips**. If your fetcher writes `store.loading = true` inside the debounced function and the caller renders against `store.loading`, the flag stays `false` for the first `ms`. UI gates that read `!loading` will permit interaction during that window. Fix: flip the loading flag synchronously at the call site (or in a thin wrapper), and reset stale per-entity slices of the store on entity change so a previous entity's "ready" data can't render against the new one. Failure signature: feature works after waiting; broken on immediate click. Repro: ENG-1029558 (`useDeviceLogCollectAndDownloadState` + debounced `loadDeviceDownloadInfo`).
 - **Re-keying a selection/state field in a hook is incomplete until you re-key every DOWNSTREAM consumer of that field.** ENG-1129819: `useDevicesSelection` was re-keyed from `host_info__nsdeviceuid` → `ns_id` (the set `unselectedIds` now holds ns_ids), but 5 cross-page consumers still filtered `unselectedIds.has(row.host_info__nsdeviceuid)` — `DevicesTable.tsx` (`disabledBulkDelete`, `handleBulkActionClick`, `handleBulkDeleteConfirm`, `onOpenTagPanel`) and `DeviceTagBulkActionsPanel.tsx` (`onOperate`). With the set holding ns_ids, `.has(nsdeviceuid)` never matched, so in Select-All mode a deselected row was silently NOT excluded from the fetched bulk set — bulk enable/disable/delete/tag would act on unchecked rows. Existing tests PASSED because their `buildDataset` fixture had a 1:1 `ns_id`↔`nsdeviceuid` mapping, masking the drift; Copilot review caught it. Lesson: `grep -rn "<oldFieldName>\|<setName>"` across the whole feature dir before declaring a re-key done; a test that keys the fixture identically on both fields won't distinguish them.
+- **Making an identity field unique: grep ALL identity surfaces, not just the Map (2026-10-05, mf-cfw PR #562 review).** Same lesson as the re-keying entry above, mf-cfw flavor: the A12 fix keyed only `groupFindingsByPolicyGroup`'s Map by the composite `order:name` — review caught that `Accordion.Item id`, `activeIds` (init/search/focus effects), collapsed-row React key, `data-policy-group` (geometry map), testids, and `PolicyDetailPanel`'s `displayNumberByGroup` Map ALL still keyed on the bare name, so the exact duplicate-name scenario stayed broken (both groups toggle together, wrong display numbers, duplicate DOM ids).
+  Rule: when a fix changes how an entity is identified, grep every consumer of the OLD identity value (`grep -n groupName`) and switch them all in the same commit — a half-applied identity change is worse than none (it looks fixed).
+  Self-inflicted trap in the same fix: `groupKeyOf(finding)` — helper typed `{groupOrder, groupName}` fed a finding (`policy_group_order`/`policy_group_name`) silently produced `"undefined:undefined"` and killed the focus cap-lift; the existing focus-lift test caught it. When a helper's param shape differs from the call site's object, tsc stays quiet if the fields are optional-compatible — always re-run the dependent tests after such a refactor.
 
 ## Vitest / Mocks
 
 - **`vi.mock` for `new ClassName(...)` needs an actual class**, not `vi.fn().mockImplementation()`. The mock isn't constructable and emits a warning. Use `vi.mock('lib', () => ({ Foo: class { constructor(x) { this.field = ... } } }))`.
 - **`vi.mock` factories are HOISTED above all top-level consts**. The factory body can't reference outer consts (e.g. `BAD_PEM`). Match on stable substrings like `pem.includes('malformed')` instead.
+- **A `jest.mock` factory that RECORDS config needs a `globalThis` holder, not a module-level binding (2026-10-05, mf-cfw).** Extends the hoisting trap above: a test that captures `withAuthorization(Component, config)`'s config into `let captured` throws `Cannot access 'capturedConfig' before initialization` (TDZ — factory call happens at wrapper-import time, hoisted above the declaration); switching to `var` degrades to `Cannot set properties of undefined` (import still runs before the initializer).
+  Fix: store inside the factory on `(globalThis as Record<string, unknown>).__name = config` — globalThis exists at every phase; read it back in the test body. Applies to any "assert the HOC/gate config" test.
 - **Radix / `@ntskui/react` Select can't be driven by `fireEvent.click` in jsdom**. Pointer events + portaled `SelectContent` make `onValueChange` unreachable, so SonarQube branch coverage on `displayValue` / `onValueChange` arrows stays partial. Workaround: `vi.mock('@ntskui/react', ...)` and replace `Select`/`SelectContent`/`SelectItem`/`SelectTrigger`/`SelectValue` with a native `<select>`/`<option>` shim that calls the real `onValueChange` from a synthetic `change` event. Reference impl: `apps/shell/src/features/incidents/dlp/__tests__/StatusControl.test.tsx`. Pair with a sibling probe component reading `useFormContext().watch('field')` to assert form state mutations rather than spying on `onChange`.
 
 ## dnd-kit reorder testing in jsdom (webui2 ntskui DataGrid)
@@ -130,3 +135,62 @@
 - CRA jest treats EVERY file under `__tests__/` as a suite — a shared fixture there fails "must contain at least one test". Put fixtures in `__fixtures__/` (and import types via `~/` alias; relative parent imports are lint errors outside test files).
 - In a suite that mocks axios, `jest.requireActual('@netskope-ui/utils')` crashes at load (`C.default.create is not a function`). Mock only the used export: `jest.mock('@netskope-ui/utils', () => ({ useFeatureFlag: () => mockFF() ?? DEFAULT }))` (the `??` default survives CRA resetMocks).
 - Backend may list one `policy_id` in several Analyze categories — never use policy_id alone as a finding identity (use `category:policy_id`).
+
+## Embedded MFE layout shift: margin-right on abs-pos `.ns-wrapper` is ignored (2026-09-25)
+- webui2 copilot widget embedded in Angular shell: tried `margin-right: 400px` on `#ns-content-wrapper`
+  (child, `width:100%` → overflows, no shrink) then on `.ns-wrapper` (computed margin applied but
+  rect unchanged). Root cause: `.ns-wrapper.authenticated` is `position:absolute; left:200px;
+  width:calc(100% - 200px)` (app.component styles) — over-constrained abs-pos ignores margin-right
+  and `right`. Only lever: rewrite `width` inline as `calc(100% - 200px - 400px)`.
+- Also: `flex: 1 1 auto` from `body .ns-wrapper` does NOT make it a flex item for sizing once
+  `position:absolute` removes it from flow. Computed width mid-transition (300ms) looked like the
+  margin "worked" — always re-probe AFTER transition ends before concluding.
+- jsdom normalizes `calc(100% - 200px - 400px)` → `calc(100% - 600px)`; assert the normalized form.
+
+## CSS: `h-full` inside a `<td>` with no definite ancestor height resolves against the viewport, and native table row-height sharing spreads that to every sibling column (2026-09-26)
+- webui2 IPSec/GRE Site tables: two cell wrapper `<div>`s (select checkbox, row-actions ellipsis) used
+  Tailwind `h-full` (`height: 100%`). On pages with few rows and no scroll-container height, Chrome had no
+  definite ancestor height to resolve the percentage against and fell back to the viewport height (~720px
+  measured). Because a native `<tr>` forces ONE shared height across all its `<td>`s, the entire row —
+  every column, not just the two offending ones — inflated to that viewport-derived height (measured
+  768px on a real tenant for what should be a ~116px 2-row cell).
+- Diagnosis pattern: `document.querySelector('table tbody tr').getBoundingClientRect()` to catch the
+  inflated row, then walk each `<td>`'s `firstElementChild.getBoundingClientRect().height` to find which
+  column(s) actually want the oversized height (`h-full` present) vs which render at their true natural
+  size (no `h-full`, just `flex flex-col`) — the row height is the MAX across all cells, so only the
+  culprit's own inner-div height differs from the rest.
+- Fix: drop `h-full` from the offending divs; the `<td>`'s own `align-middle` (or `vertical-align`)
+  already centers content once the row's height is correctly content-driven — no centering behavior is
+  lost. When the offending wrapper is a widely-shared component (used by other tables that DO have a
+  scroll container and don't hit this bug), scope the fix locally via `cloneElement` overriding
+  `className` on the shared renderer's output, rather than editing the shared component itself.
+- **This fix alone did NOT reproduce or fix the user's actually-reported visual bug** — see the next
+  entry for the real cause and the "reproduced X, called it done" trap this created.
+
+## `truncate` inside nested flex wrappers silently no-ops without `min-w-0` on EVERY flex-item ancestor (2026-09-28)
+- webui2 tunnel POP column: master's #2999 added `truncate` + `min-w-0` to `PopNameDisplay`, but the caller's `renderPop` wrapper `div.flex items-center gap-1` kept default `min-width:auto` — stayed 216px in a 180px cell, text overlapped next column. User said "still not fixed" after rebase; my earlier SubRowCell fix had become moot post-rebase and I hadn't re-verified.
+- Diagnose: walk up from the `.truncate` span printing `getBoundingClientRect().width` + computed `minWidth`; first ancestor wider than its container with `minWidth: auto` is the culprit. Fix: `min-w-0` there.
+- Rule: after rebasing a visual fix onto a master that touched the same component, re-run the live repro (same interaction state) before re-claiming the fix.
+
+## Deferred-promise jest mocks + chained `expect().rejects` re-invoke the fn; second call gets undefined (2026-10-05)
+- `mockPost.mockResolvedValueOnce(body)` followed by TWO assertions (`await expect(fn()).rejects.toThrow(msg)` then `await expect(fn()).rejects.toBeInstanceOf(...)`) fails the second: each `expect(fn())` CALLS fn again, the Once-mock is consumed, second call resolves undefined → `resp.data.data` throws TypeError, not the guarded AxiosError.
+- Fix: `mockResolvedValue` (non-Once) or catch once: `const caught = await fn().then(() => { throw new Error('expected reject') }, (e) => e)` then assert everything on `caught`. Mirrors trafficSimulator.api.test.ts's pattern.
+- Also: error-dialect it.each rows need a per-row expected message — a body with no `errors` array falls through `parseErrorResponse` to the generic i18n "Something went wrong", so `toBe('Permission denied')` only holds for bodies that carry an errors array.
+
+## Angular `*ngIf`-mounted MFE wrapper loses a same-tick window event — wait for the MFE's READY (2026-10-05, ENG-1338904)
+- webui `openAnalyzePanelWithMode` set `showAnalyzePanel=true` and dispatched `ANALYZE_SIDE_PANEL_OPEN` synchronously; the wrapper renders on a later CD pass and React registers its listener in a `useEffect`, so the first click was lost (every reopen too, since CLOSE unmounts). mf-cfw already dispatched `ANALYZE_SIDE_PANEL_READY`; webui just never listened. Fix: park the mode, flush one OPEN on READY, reset on CLOSE (PR webui#19052). Grep for the counterpart event before inventing a `setTimeout` workaround.
+- Jest spying `window.addEventListener`/`dispatchEvent` to fire the real listener was flaky in that spec; assert `addEventListener` was called with the bound ref and invoke `component.boundOnX(event)` directly.
+- Devbox gotchas: `ns.globals.nplan6460_policy_analyzer_enabled` (from `isNplan6460PolicyAnalyzerEnabled()`) AND `isRunAnalyzeCfwEnabled()` both gate the button, read at bootstrap, so a full reload is needed after a flag edit. A worktree's `dev-lazy` bundle can be stale vs HEAD (verify the served button label before using it as a baseline). The ns-selector dropdown often needs two clicks after reload. Real CLOSE needs the results panel, so with `/analyze` 403 dispatch CLOSE by hand. `mkdir -p /tmp/claude` before redirecting background logs there.
+- Background sub-agent `$TMPDIR` is per-sandbox: a log written unsandboxed lives under `/var/folders/.../T/`, not the sandbox `$TMPDIR` (grep found "No such file"). Use `/tmp/claude/` for logs you need to read back.
+
+## @netskope-ui/dropdown closes by UNMOUNTING menu content — reset menu-local UI state via an unmount-cleanup sentinel (2026-10-18)
+- AddCriteriaMenu's search reset on the trigger's `onClick` never fired on reopen (live repro: type, Escape, reopen — filter still applied). `Dropdown.Root` has no `onOpenChange`, but it unmounts its content children when closed, so a tiny `<ResetSearchOnClose reset={fn} />` rendered inside the menu whose `useEffect(() => reset, [reset])` cleanup fires exactly at close is the reliable reset point (state itself lives in the always-mounted parent).
+- Testing it needs a STATEFUL dropdown mock that actually unmounts content on toggle; nesting depth must come from React context — a module-level depth counter re-runs on re-render and mislabels the outer Root ("Found multiple elements by dd-outer-trigger").
+- "Why not a useUnmountReset hook?" (user asked): a hook borrows the LIFECYCLE OF THE COMPONENT THAT CALLS IT. Calling it in the always-mounted parent (where the state lives) means cleanup never fires on menu close; the only correct host is a component rendered INSIDE the menu content — which is the sentinel itself. The hook version still needs the sentinel to call it from, so with one usage site it's pure indirection. One-liner: unmount lifecycle is a property of a component, not of a hook.
+
+## @netskope-ui/core Popover: root onClose does NOT wire the header X — Popover.Header has its own onClose (2026-10-19)
+- The X button in Popover.Header is rendered by the Header subcomponent and fires the HEADER's `onClose` prop; the root `Popover onClose` only handles outside-press dismissal. Passing onClose only at the root leaves the X dead (live-caught on the simulator history View All popover). Pass the same handler to both. Verified from dist: Header defaults `showCloseButton` to true and renders the X itself.
+
+## MSW `server.use` overrides are LIFO — register AFTER the default handlers or the fixture wins silently (2026-10-19)
+- In a vitest suite that calls a `setup()` helper doing `server.use(...featureHandlers)`, an override registered BEFORE setup (e.g. `server.use(http.patch(..., 412))` then `setup()`) is PREPENDED-BY-ORDER-OF-REGISTRATION such that the later feature handlers take precedence: the PATCH hit the fixture 200, mutateAsync resolved, modal closed, and the assertion on the conflict banner got `undefined`. Looked exactly like a product-code bug (error state never set) — cost a debug round before a state probe showed `state.kind === 'closed'` (success path ran).
+- Fix: always register route overrides AFTER the setup that installs the base handlers (matches the existing "Register the 500 AFTER setup() so it prepends and wins" comment pattern in useConfigModalController.test.tsx). Quick discriminator for "did my override even fire": probe post-submit state — success/close vs error means fixture won.

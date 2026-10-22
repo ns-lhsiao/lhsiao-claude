@@ -20,6 +20,27 @@
 - **`pull_request` runs the HEAD/merge version of the workflow YAML, not the base branch.** Correcting an earlier wrong assumption: only `pull_request_target` (and `push` to a branch) uses the base/target-branch copy. For `pull_request` on a same-repo branch, the workflow file executed is the PR head merged into base, WITH secrets and a read/write token. Fork PRs run the head version too but get a read-only token and NO secrets. Practical upshot: you can e2e-test a workflow-file change WITHOUT merging to the trigger branch — cherry-pick the change onto a same-repo PR branch and push; the modified YAML runs. Verify via the run's `head_sha`/`path` (`gh api /repos/O/R/actions/runs/<id> --jq '{path,head_sha}'`). Confirmed 2026-08-21 (webui2 balkan-pr-scope: cherry-picked the PAT fix onto demo branches, scope run head_sha = the cherry-pick commit, fixed step ran).
 - **A label added with the default `GITHUB_TOKEN` (`github.token`) does NOT trigger another workflow.** GitHub's recursion guard suppresses workflow triggers from events created by `GITHUB_TOKEN` (exceptions: `workflow_dispatch`, `repository_dispatch`). So `gh pr edit --add-label` under `GH_TOKEN: ${{ github.token }}` fires a `labeled` event on the timeline but no `on: pull_request: types: [labeled]` workflow picks it up. Fix: stamp with a PAT or GitHub App token (a distinct identity) — then the `labeled` event fires normally. webui2 balkan-pr-scope → pr-sidecar used `EP_FALCON_PT_TOKEN_DEFAULT`. Symptom before fix: label present on PR but zero `labeled`-event runs; only the `opened` run exists (parked `waiting`). Confirmed 2026-08-21 (PR #2278, demo #2271).
 
+## kubectl: refreshing a Rancher-issued qa01/stg01 kubeconfig token
+
+- **A fresh per-cluster kubeconfig downloaded from Rancher lands at `~/.kube/stork-<cluster>.yaml`, NOT
+  merged into `~/.kube/config`.** `kubectl config use-context <cluster>` against the stale
+  `~/.kube/config` still 401s ("You must be logged in") even right after refreshing in the browser,
+  because the old token is still the one on disk at that path.
+- **`KUBECONFIG=a:b kubectl config view --flatten` keeps the FIRST file's entries on a name collision.**
+  Merging with the stale `~/.kube/config` listed first (`KUBECONFIG=~/.kube/config:~/.kube/stork-<x>.yaml`)
+  silently kept the old (expired) token under the same context/user name — merge succeeded, auth still
+  401'd, no error to signal the merge picked the wrong side. Fix: put the freshly-downloaded per-cluster
+  file FIRST in the `KUBECONFIG` path list so its entries win: `KUBECONFIG=~/.kube/stork-<cluster>.yaml:~/.kube/config
+  kubectl config view --flatten > /tmp/merged.yaml && mv /tmp/merged.yaml ~/.kube/config`. Verify by
+  grepping `token:` in the result and diffing against the per-cluster file's token before trusting
+  `kubectl get ns`.
+- Confirmed 2026-09-07 (ENG-1150447 DNS RIS re-verification on qa01, context
+  `stork-qa01-mp-npe-iad0-nc1`, cluster `c-nwgg2` via `rancher.prime.iad0.netskope.com`).
+
 ## GitHub Actions: local action refs in reusable workflows
 
 - **Step-level `uses: ./.github/actions/<x>` inside a REUSABLE workflow resolves to the CALLER's `$GITHUB_WORKSPACE`, not the reusable workflow's own repo.** Failure: `Can't find 'action.yml' ... under /home/runner/_work/<caller>/<caller>/.github/actions/<x>`. This differs from JOB-level `uses: ./.github/workflows/<x>.yaml` (calling another reusable workflow), which DOES resolve to the repo+ref of the workflow declaring the job. So composite/local actions invoked from a reusable workflow's steps MUST use an absolute `owner/repo/path@ref`. There is no built-in "same ref as this workflow" for `uses:` — hardcoding `@develop` is the common practice; to test a feature branch's action changes end-to-end, temporarily pin the absolute ref to the PR branch and revert to `@develop` before merge. Repro: ngweb-actions service_cicd.yaml manifest-and-deploy (ENG-1052961).
+
+## pns_deploy.py verify does not zero-pad `--namespace 5` (2026-10-02)
+
+- `pns_deploy.py deploy --namespace 5` zero-pads internally (targets `qa01-mp-npe-rtp05--webui`), but `pns_deploy.py verify --namespace 5` does NOT — it looks up `qa01-mp-npe-rtp5--webui` and reports "namespace does not exist" while the deploy is fine. Pass the padded form to verify: `verify --namespace 05`.

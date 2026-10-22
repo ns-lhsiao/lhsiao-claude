@@ -47,7 +47,32 @@
   Most robust for multi-KB markdown bodies: build `{"body": "..."}` with `python3 -c "import json,…"`
   and pass `--input <file>`, then always verify with `--jq '.body | length'` before moving on.
 - **Re-check PR state immediately before pushing a follow-up commit to an existing PR branch.** 2026-09-28: `gh pr view 3010` said OPEN at the start of the session; the user squash-merged it ~15 min later while I was still validating. I pushed the follow-up 3h after the merge onto the now-closed PR's branch and PATCHed its body — commit never reached master, and I only noticed when the user asked "PR 還開著嗎?". Rule: run `gh api repos/<o>/<r>/pulls/<n> -q '.state,.merged'` in the SAME Bash call as `git push`, and abort the push if `merged=true` — open a new branch from origin/master + `git cherry-pick` instead.
+- **2026-09-24 (netSkope/ursa)**: `gh pr edit <n> --repo netSkope/ursa` failed: `your authentication token is missing required scopes [read:project]` — `gh pr edit` internally queries Projects even when the PR has none. Fix: `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f title='...' -f body='...'` — REST PATCH needs no extra scope. Alternative: `gh auth refresh -s read:project` (interactive browser flow).
+- **2026-09-24 (same round)**: `gh pr diff <n> -- <file1> <file2>` also breaks: "accepts at most 1 arg(s)" — the `--` pathspec form takes ONE path. Multi-file: `gh api repos/<o>/<r>/pulls/<n>/files --paginate --jq '.[] | select(.filename=="a" or .filename=="b") | .patch'`.
 
 ## Local HTML reports: embed screenshots by relative path, not pr-screenshots URLs (2026-10-08)
 - A boot-bugfix report embedding `github.com/netSkope/pr-screenshots/raw/...` images showed nothing when opened locally (private repo, cross-site, no session) — user: "html screenshots 看不到".
 - Fix: copy the PNGs next to the report (`all-html/<project>/screenshots/<slug>/`) and use relative `src`; keep the github.com raw URLs only in the PR body.
+
+## Remote branch delete after squash-merge blocked by repo ruleset (mf-cfw) (2026-09-24)
+- After PR #534 merged, `git push origin --delete pr/ENG-1266657/view-analysis-wiring` was rejected:
+  `push declined due to repository rule violations`. Not a permissions issue on the token — a
+  repo ruleset governs refs matching the branch pattern. `gh api -X DELETE repos/netSkope/mf-cfw/git/refs/heads/...`
+  would hit the same rule.
+- Impact: none on the merge itself; the merged branch is inert. finish-up's "remote: deleted"
+  summary line is unattainable in this repo — report "remote: delete blocked by repo rule (inert)"
+  instead and move on. Applies to netSkope/mf-cfw; check other repos' rulesets before assuming.
+
+## sq-parse.py arg order: owner/repo is ONE arg, before the PR number (2026-09-24)
+- First call `sq-parse.py webui2 2944 <ts>` failed: `argument pr_number: invalid int value: 'webui2'`.
+  Correct invocation is `sq-parse.py netSkope/webui2 2944 <timestamp>` — `owner/repo` as a single
+  slash-joined arg, then the PR number, then the push timestamp. Same shape as get-run-ids.py.
+  See knowledge/pr-workflow.md.
+
+## npm registry mirrors lag behind the artifactory publish target (2026-09-25)
+- `@netskope/mf-copilot@2.4.0` publish (GH Actions run, `npm publish` → `artifactory.netskope.io/.../npm-dev/`) succeeded at 05:04Z, but `npm view`/`npm pack` against BOTH read mirrors (`npmjs.netskope.io`, `artifactory-rd.netskope.io/.../netskope-npm` virtual) returned `notarget` for hours. User's GH release link was right; registry was stale.
+- Fix: don't conclude "version missing" from read-mirror 404s alone. Verify via the publish path (GH Actions run logs show the exact `+ pkg@version` line), wait for index propagation, then retry. `dist-tags` on the mirror (`2.4.x: [..., 2.4.0]`) is the confirmation signal. See knowledge/pr-workflow.md.
+
+## `gh pr create --reviewer` wants GitHub logins, not email prefixes; resolve from commit history (2026-10-12)
+- `gh pr create --reviewer rdecastrosilva` (email prefix from `git log --format='%an <%ae>'`) created the PR fine but failed the reviewer step: `GraphQL: Could not resolve user with login 'rdecastrosilva'`. Netskope logins carry an `ns-` prefix invisible in git email data.
+- Resolve real logins from the repo's own commit metadata: `gh api "repos/<o>/<r>/commits?path=<touched-file>&per_page=10" --jq '.[].author.login'`, then `gh api -X POST repos/<o>/<r>/pulls/<n>/requested_reviewers -f 'reviewers[]=<login>'`. Verify with `gh pr view <n> --json reviewRequests`.

@@ -242,7 +242,7 @@
 - The wb plugin's remind-design-landing.sh Stop hook fires on ANY `openspec/changes/<slug>/` dir, including changes whose PR already merged (add-aws-sidecar-leg, ENG-1335119) — it reads them as "ephemeral design artifacts". Don't spec:land a merged change; `openspec archive "<slug>" --yes` (moves to archive/, lands spec delta) is the correct disposition, then commit the moves.
 
 ## Private Google Sheets: `/export?format=csv` curl returns 401 login page (2026-10-22)
-- No gh-style token path; ask the user to paste rows or File → Download → CSV into the repo/tmp.
+- Working path (user pointed to docshare-publish's auth): unsandboxed `playwright-cli -s=gsheet open "<sheet edit url>" --headed --profile=$HOME/.playwright-cli-profile-netskope-sso` (user may need to redo Netskope Okta SSO in the window), then in-page same-origin `fetch('/spreadsheets/d/<id>/gviz/tq?tqx=out:csv&gid=<gid>')` → CSV text. Tab gids: click the tab, read `location.href`. gviz drops formatting (red/bold annotations) — screenshot too. `close` the session after.
 
 ## Reading Private GitHub Pages — browser OAuth, not gh token (2026-09-01)
 - **`gh auth token` + curl does NOT work for a private `*.pages.github.io` URL.** Private Pages authenticate via a **browser OAuth cookie** (`_gh_pages`, per-site session via the `github.com/pages/auth` flow) — a different auth surface from the `gh` API token. Curling with `Authorization: token $(gh auth token)` returns HTTP 200 but redirects to `github.com/login?return_to=...pages/auth...` — the login page, not the content.

@@ -7,16 +7,16 @@ description: >
   deploy. Use when the user says: "setup fedramp preprod kubeconfig",
   "connect to fedramp preprod k8s", "get fedramp preprod credentials",
   "fedramp preprod rancher", "kubectl on fed preprod", "check pods on
-  fed-mp-preprod", "拿 fedramp preprod credential", "連 fedramp preprod",
-  "rancher.betagovskope.io 連不上", "fedramp preprod rancher tunnel 壞了",
+  fed-mp-preprod", "rancher.betagovskope.io unreachable",
+  "fedramp preprod rancher tunnel broken",
   or is blocked bringing up the tshuttle tunnel / nsk kubeconfig for FedRAMP
   PreProd. Guides through teleport login, the tshuttle tunnel (fed02-first),
   the Rancher API key, nsk kubeconfig download, and kubectl verification, and
   runs a read-only diagnostic that says exactly which step is blocking you.
   If the user wants to DEPLOY a patch (Jenkins / one_button_webui / cdjenkinsfedh),
   use fedramp-preprod-one-button-webui instead -- a different tunnel + access path. If the
-  request is a bare "fedramp preprod 連不上 / tunnel 壞了" with no rancher-vs-jenkins
-  signal, ask which one before picking. Does NOT deploy patches.
+  request is a bare "fedramp preprod unreachable / tunnel broken" with no
+  rancher-vs-jenkins signal, ask which one before picking. Does NOT deploy patches.
   Does NOT cover FedRAMP/PBMM PROD (US-citizen + NOC only) or Kibana.
 ---
 

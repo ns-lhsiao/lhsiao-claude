@@ -9,9 +9,10 @@
 # was needed), or `relogin` from an interactive terminal.
 #
 # Usage:
-#   docshare.sh publish <file> [shortcode]   # upload; prints the live URL
+#   docshare.sh publish <file> [shortcode]   # upload, or replace in place if you own the shortcode; prints the live URL
+#   docshare.sh replace <file> <shortcode|id> # replace an EXISTING doc in place; fails if the target does not exist
 #   docshare.sh list                         # table of your files (name / shortcode / id)
-#   docshare.sh delete <shortcode|id>        # delete by shortcode or file id
+#   docshare.sh delete <shortcode|id>        # delete by shortcode or file id (erases its view history)
 #   docshare.sh get <shortcode|url> [outfile] # fetch published content (stdout, or save to outfile - use for PDFs)
 #   docshare.sh login | capture | relogin    # (re)authenticate, see Auth above
 #   docshare.sh check                        # verify cookie still valid
@@ -67,7 +68,8 @@ is_valid() {
 }
 
 guard_valid() {
-  is_valid; local rc=$?
+  local rc=0
+  is_valid || rc=$?
   case "$rc" in
     0) return 0 ;;
     1) die "cookie expired (redirects to Google login) - run: $0 login" ;;
@@ -77,7 +79,8 @@ guard_valid() {
 
 cmd_check() {
   require_cookie
-  is_valid; local rc=$?
+  local rc=0
+  is_valid || rc=$?
   case "$rc" in
     0) echo "OK - cookie valid" ;;
     1) die "cookie expired - run: $0 login" ;;
@@ -104,12 +107,35 @@ cmd_publish() {
     *)            ctype="application/octet-stream" ;;
   esac
 
+  local redirect
+
+  # Republishing a shortcode you already own replaces the file in place. Same file id,
+  # so the link keeps its view history; delete + upload would start it from zero.
+  if [ -n "$shortcode" ]; then
+    shortcode=$(printf '%s' "$shortcode" | tr '[:upper:]' '[:lower:]')
+    local id
+    id=$(_rows | awk -F'\t' -v c="/$shortcode" '$2==c {print $3; exit}')
+    if [ -n "$id" ]; then
+      redirect=$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 120 \
+                   -H "Cookie: $(cookie)" -F "file=@${file};type=${ctype}" "$BASE/files/$id/replace")
+      case "$redirect" in
+        *success*)
+          echo "replaced the existing /$shortcode in place (link and view history kept)" >&2
+          echo "$BASE/$shortcode"
+          ;;
+        *error*)      die "replace failed: $(urldecode "${redirect#*error=}")" ;;
+        *google.com*) die "cookie expired mid-request - run: $0 relogin" ;;
+        *)            die "unexpected response: $redirect" ;;
+      esac
+      return
+    fi
+  fi
+
   local args=(-F "file=@${file};type=${ctype}")
   # --form-string (not -F) for shortcode: a value starting with @ or < would
   # otherwise be interpreted by curl as "read this local file", not literal text.
   [ -n "$shortcode" ] && args+=(--form-string "shortcode=${shortcode}")
 
-  local redirect
   redirect=$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 120 \
                -H "Cookie: $(cookie)" "${args[@]}" "$BASE/upload")
 
@@ -139,16 +165,17 @@ _rows() {
     | python3 -c '
 import sys, re, html
 h = sys.stdin.read()
-# each file row has: <p ...>FILENAME</p> ... href="/SHORTCODE" ... /files/ID/edit
-# split on the edit-link anchor which terminates each row block
-for m in re.finditer(r"/files/([A-Za-z0-9]{20})/edit", h):
-    fid = m.group(1)
-    block = h[max(0, m.start()-3200):m.start()]
-    fn = re.findall(r"<p[^>]*>\s*([^<]+?\.[A-Za-z0-9]{1,5})\s*</p>", block, re.I)
+# One <tr data-file-id="ID"> per file. Parsing the row itself, rather than a
+# fixed window of text before the edit link, survives the row growing (each
+# now carries inline SVG buttons) and rows with long filenames.
+for m in re.finditer(r"<tr[^>]*\bdata-file-id=\"([A-Za-z0-9]{20})\"[^>]*>(.*?)</tr>", h, re.S):
+    fid, row = m.group(1), m.group(2)
+    # filename: the <p title="FILENAME"> the table truncates visually; fall back to the text
+    fn = re.search(r"<p[^>]*\btitle=\"([^\"]+)\"", row) or re.search(r"<p[^>]*>\s*([^<]+?\.[A-Za-z0-9]{1,5})\s*</p>", row, re.I)
     # shortcode link renders as <a href="/CODE" target="_blank">/CODE</a>
-    sc = re.findall(r"href=\"/([A-Za-z0-9\-]+)\"[^>]*target", block)
-    name = html.unescape(fn[-1]).strip() if fn else "?"
-    code = sc[-1] if sc else "?"
+    sc = re.search(r"href=\"/([A-Za-z0-9\-]+)\"[^>]*\btarget=\"_blank\"", row)
+    name = html.unescape(fn.group(1)).strip() if fn else "?"
+    code = sc.group(1) if sc else "?"
     print(f"{name}\t/{code}\t{fid}")
 '
 }
@@ -187,19 +214,79 @@ cmd_delete() {
   esac
 }
 
+# Replace the content of an existing file in place (POST /files/<id>/replace). Unlike
+# publish with an owned shortcode (same endpoint, upload fallback when unowned), replace
+# FAILS when the target does not exist - so an agent can never accidentally create a new
+# doc when it meant to update one. Keeps the shortcode link and its view history.
+cmd_replace() {
+  local file="${1:-}" target="${2:-}"
+  [ -n "$file" ] && [ -n "$target" ] || die "usage: $0 replace <file> <shortcode|id>"
+  [ -f "$file" ] || die "no such file: $file"
+  require_cookie; guard_valid
+
+  # accept a full URL, a shortcode, or a 20-char file id (leading "/" forces shortcode)
+  local forced_shortcode=0
+  target="${target#"$BASE"/}"
+  case "$target" in /*) forced_shortcode=1 ;; esac
+  target="${target#/}"
+
+  local id="$target"
+  if [ "$forced_shortcode" = 1 ] || ! printf '%s' "$target" | grep -qE '^[A-Za-z0-9]{20}$'; then
+    id=$(_rows | awk -F'\t' -v c="/$target" '$2==c {print $3; exit}')
+    [ -n "$id" ] || die "no file of yours with shortcode /$target (list only shows your own uploads)"
+  fi
+
+  local ctype="text/html"
+  case "$file" in
+    *.html|*.htm) ctype="text/html" ;;
+    *.md)         ctype="text/markdown" ;;
+    *.pdf)        ctype="application/pdf" ;;
+    *.txt)        ctype="text/plain" ;;
+    *)            ctype="application/octet-stream" ;;
+  esac
+
+  local redirect
+  redirect=$(curl -sS -o /dev/null -w '%{redirect_url}' --max-time 120 \
+               -H "Cookie: $(cookie)" -F "file=@${file};type=${ctype}" \
+               "$BASE/files/$id/replace")
+  case "$redirect" in
+    *success*)    echo "replaced $id with $(basename "$file")" ;;
+    *error*)      die "replace failed: $(urldecode "${redirect#*error=}")" ;;
+    *google.com*) die "cookie expired mid-request - run: $0 relogin" ;;
+    *)            die "unexpected response: $redirect" ;;
+  esac
+}
+
+# docshare appends an analytics <script> to every HTML page it serves. It is not part of
+# the published file, so get drops it: an edited copy republished with it would carry a
+# stale beacon. The pattern mirrors beaconScript in the docshare server.
+_strip_beacon() {
+  python3 -c '
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8", errors="surrogateescape").read()
+s = re.sub(r"\n?<script>\(function\(\)\{var id=\x22[A-Za-z0-9_-]+\x22;var t0=Date\.now\(\).*?\}\)\(\);</script>", "", s, flags=re.S)
+open(p, "w", encoding="utf-8", errors="surrogateescape").write(s)
+' "$1"
+}
+
 cmd_get() {
-  local sc="${1:-}" outfile="${2:-}"
+  local sc="${1:-}" outfile="${2:-}" ctype
   [ -n "$sc" ] || die "usage: $0 get <shortcode|url> [outfile]"
   # accept a full docshare URL, not just a bare shortcode
   sc="${sc#"$BASE"/}"
   sc="${sc#https://docshare.netskope.com/}"
   sc="${sc#http://docshare.netskope.com/}"
   require_cookie; guard_valid
+  _get_tmp=$(mktemp) || die "could not create a temp file"
+  trap 'rm -f "$_get_tmp"' EXIT
+  ctype=$(curl -sS --max-time 30 -H "Cookie: $(cookie)" -o "$_get_tmp" -w '%{content_type}' "$BASE/${sc#/}")
+  case "$ctype" in text/html*) _strip_beacon "$_get_tmp" ;; esac
   if [ -n "$outfile" ]; then
-    curl -sS --max-time 30 -H "Cookie: $(cookie)" -o "$outfile" "$BASE/${sc#/}"
+    cp "$_get_tmp" "$outfile"
     echo "saved to $outfile"
   else
-    curl -sS --max-time 30 -H "Cookie: $(cookie)" "$BASE/${sc#/}"
+    cat "$_get_tmp"
   fi
 }
 
@@ -274,7 +361,7 @@ _open_browser() {
 cmd_login() {
   command -v playwright-cli >/dev/null || die "playwright-cli not installed"
   _open_browser
-  if _capture_cookies 2>/dev/null; then
+  if _capture_cookies; then
     playwright-cli close >/dev/null 2>&1 || true
     echo "already authenticated - cookie captured, no SSO needed"
     cmd_check
@@ -307,7 +394,7 @@ cmd_relogin() {
   fi
   _open_browser
   # already logged in? skip the SSO wait entirely.
-  if _capture_cookies 2>/dev/null; then
+  if _capture_cookies; then
     playwright-cli close >/dev/null 2>&1 || true
     echo "already authenticated - no SSO needed"
     cmd_check
@@ -329,10 +416,11 @@ case "$sub" in
   publish|upload) cmd_publish "$@" ;;
   list|ls)        cmd_list "$@" ;;
   delete|rm)      cmd_delete "$@" ;;
+  replace)        cmd_replace "$@" ;;
   get|cat)        cmd_get "$@" ;;
   login)          cmd_login "$@" ;;
   capture)        cmd_capture "$@" ;;
   relogin)        cmd_relogin "$@" ;;
   check)          cmd_check "$@" ;;
-  *) echo "usage: $0 {publish <file> [shortcode]|list|delete <target>|get <sc|url> [outfile]|login|capture|relogin|check}" >&2; exit 2 ;;
+  *) echo "usage: $0 {publish <file> [shortcode]|replace <file> <sc|id>|list|delete <target>|get <sc|url> [outfile]|login|capture|relogin|check}" >&2; exit 2 ;;
 esac

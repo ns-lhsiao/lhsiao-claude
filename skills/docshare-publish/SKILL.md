@@ -37,9 +37,10 @@ skill dir) - invoke one of the two full paths directly, e.g.:
 
 | Command | What it does |
 |---|---|
-| `publish <file> [shortcode]` | upload; prints the live `https://docshare.netskope.com/<shortcode>` URL |
+| `publish <file> [shortcode]` | upload; prints the live `https://docshare.netskope.com/<shortcode>` URL. If you already own that shortcode, replaces the file in place (same link, view history kept) |
+| `replace <file> <shortcode\|id>` | replace an existing file's content in place; keeps the link and its view history. Unlike `publish`, FAILS if the target does not exist (update-only, never creates) |
 | `list` | table: filename / shortcode / file-id |
-| `delete <target>` | delete by shortcode or 20-char file id |
+| `delete <target>` | delete by shortcode or 20-char file id. Also erases the doc's view history; never use it to republish |
 | `get <shortcode\|url> [outfile]` | fetch published content - stdout, or save to `outfile` |
 | `check` | is the cookie still valid? |
 | `login` | open headed browser; capture the cookie now if the profile is already authed (agent-safe, non-interactive) |
@@ -109,7 +110,9 @@ you:
 ```
 
 That prints the raw file to stdout - fine for HTML/Markdown/text, which you can read
-directly. **PDFs are binary** - never let a PDF hit stdout into your context. Pass an
+directly. For HTML, `get` drops the analytics `<script>` docshare appends when serving a
+page, so the output is the published file and safe to edit and `publish` again.
+**PDFs are binary** - never let a PDF hit stdout into your context. Pass an
 `outfile` to save it, then read the saved file with the Read tool (which paginates
 PDFs):
 
@@ -159,7 +162,9 @@ GET  /                       homepage: upload form + your files table
 POST /upload                 multipart: file=@path;type=..., shortcode=<opt>
                              -> 303 redirect ?success=... | ?error=File+too+large (max 32MB)
 GET  /<shortcode>            serve the published file
-POST /files/<id>/delete      -> 303 ?success=File+deleted+successfully
+POST /files/<id>/replace     multipart: file=@path;type=... (same id, link, view history)
+                             -> 303 ?success=File+replaced+successfully
+POST /files/<id>/delete      -> 303 ?success=File+deleted+successfully (erases view history)
 GET  /files/<id>/edit        edit page (not wrapped; shortcode+content editable in UI)
 ```
 
@@ -167,6 +172,25 @@ File-id is a 20-char alphanumeric, distinct from the shortcode. `list` shows bot
 
 ## Overwriting / updating a published doc
 
-Two options: `delete` then `publish` again with the same shortcode, or use the UI
-`/files/<id>/edit` page. The script does not wrap edit - re-publishing is simpler for
-regenerated artifacts.
+Run `publish` again with the same shortcode. The script sees you already own it and
+replaces the file in place (`POST /files/<id>/replace`): the link stays the same and so
+does its view history (views, readers, read time).
+
+When you specifically intend an UPDATE (the doc must already exist), prefer `replace` -
+it resolves the target and fails cleanly instead of creating a new doc on a typo'd or
+freed shortcode:
+
+```bash
+~/.claude/skills/docshare-publish/scripts/docshare.sh replace /path/to/new-report.html foo-report
+```
+
+`<shortcode|id>` can be a shortcode, a full docshare URL, or the 20-char file id; it only
+finds files under your own account. The script does not wrap the edit form (renaming the
+shortcode) - use the UI `/files/<id>/edit` page for that.
+
+Do **not** `delete` then `publish`. Delete erases the doc's view log and reader stats,
+and the new upload starts every counter at zero. Use `delete` only to take a doc down for
+good.
+
+If `publish` fails with "Shortcode already exists", someone else owns that shortcode (or
+`list` could not find yours): run `list` to check, and report back rather than deleting.

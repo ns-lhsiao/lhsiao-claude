@@ -3,10 +3,9 @@ name: qa01-parallel-namespace-routing
 description: >-
   Inspect, add, or remove the tenant hostnames routed to a QA01 parallel
   namespace (rtp-XX) on the shared nginx VM. Use when the user says "add tenant
-  to rtp12", "route my tenant to rtp09", "把 tenant 加到 rtp12", "remove tenant
-  from rtp-X", "把 tenant 從 rtp12 移除", "which tenant is bound to rtp12",
-  "rtp12 綁的 tenant 是哪個", "unbind tenant", "clean up rtp nginx config", "my
-  rtp deploy is up but the tenant still shows the old UI", or mentions
+  to rtp12", "route my tenant to rtp09", "remove tenant from rtp-X",
+  "which tenant is bound to rtp12", "unbind tenant", "clean up rtp nginx
+  config", "my rtp deploy is up but the tenant still shows the old UI", or mentions
   pns_setup.sh / webui_proxy_rtpXX.nginx.conf / ngsslwebui on qa01. Reads are
   safe; every write edits a shared nginx that serves ALL qa01 tenants, so it is
   strictly gated: dry-run with `nginx -t` first, AskUserQuestion before any

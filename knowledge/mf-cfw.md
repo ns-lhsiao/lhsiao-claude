@@ -104,3 +104,8 @@
 - Spec v50 (Confluence 8036483474) lists NO `required` on any policyanalyzer schema. FE typed Simulate match fields required; live `POST /simulate` returned `{policy_order, policy_name, enabled, action}` only, and `MatchCardBody` `match.users.length` threw in render (per-tab boundary hid all results). I had also told the user "users/tags are required in spec" from reading the property list — wrong; parse the schema with PyYAML and check `required` explicitly before claiming it.
 - Fix pattern: optional types (tsc then lists every reader), guard arrays at the ONE shared renderer, hide absent rows/pills rather than defaulting (absent `enabled` rendered "Disabled" = a lie).
 - Also: `/tmp/claude/` got wiped between days — a page generator script and its input JSON vanished. Keep re-runnable generators next to the report (or edit the HTML directly) when a doc will be iterated over several days.
+
+## `yarn test` in sandbox: "Failed to load native binding" (@swc/core) (2026-10-22)
+
+- Worktree `node_modules` symlinks to another worktree; craco/ts-node loads `@swc/core` darwin-arm64 `.node` → sandbox blocks dlopen. `tsc`/`eslint` fine in sandbox; jest not. Rerun `yarn test <path>` with `dangerouslyDisableSandbox: true` — passes (21 suites/239 tests for trafficSimulator).
+- Sandbox Bash also can't write to sibling worktrees or `~/.claude/knowledge` (`operation not permitted`); use Edit/Write tools for those.

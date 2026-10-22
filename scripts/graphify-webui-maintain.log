@@ -27,3 +27,7 @@ Current branch php-graphify is up to date.
 [graphify extract] 11 file(s) not classified (no supported extension or shebang), skipped: .htaccess, .php_cs, Makefile, RobotoCondensed-Regular.ttf, phpunit.xml.dist, robotocondensed.ctg.z (+5 more)
 [graphify extract] no incremental changes detected (--no-cluster); outputs left untouched.
 2026-08-29T23:47:39+08:00 [/Users/lhsiao/ns/git/webui-php-graphify] OK: rebased onto origin/develop and refreshed graph.json
+2026-09-10T04:15:16+08:00 [/Users/lhsiao/ns/git/webui-php-graphify] ABORT: dirty tree, skipping rebase+refresh (never auto-stashing)
+2026-09-10T04:15:16+08:00 [/Users/lhsiao/ns/git/webui-dev-graphify] ABORT: dirty tree, skipping rebase+refresh (never auto-stashing)
+2026-09-18T11:39:34+08:00 [/Users/lhsiao/ns/git/webui-php-graphify] ABORT: dirty tree, skipping rebase+refresh (never auto-stashing)
+2026-09-18T11:39:34+08:00 [/Users/lhsiao/ns/git/webui-dev-graphify] ABORT: dirty tree, skipping rebase+refresh (never auto-stashing)

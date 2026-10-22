@@ -5,8 +5,8 @@ description: >
   self-service one_button_webui Jenkins pipeline. Use when the user says:
   "deploy patch to fedramp preprod", "fedramp preprod deploy", "run
   one_button_webui on fed preprod", "deploy webui to fed02-mp-preprod",
-  "部署 patch 到 fedramp preprod", "fedramp preprod jenkins 連不上", "cdjenkinsfedh
-  連不上", or is bringing up / troubleshooting the deploy-Jenkins tunnel for
+  "fedramp preprod jenkins unreachable", "cdjenkinsfedh unreachable", or is
+  bringing up / troubleshooting the deploy-Jenkins tunnel for
   FedRAMP PreProd. Guides through teleport login, the deploy-Jenkins tunnel
   (routes the Jenkins floating IP, NOT the rancher subnet), okta-group +
   YubiKey access, and the one_button_webui parameters, and runs a read-only

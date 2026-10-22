@@ -15,7 +15,7 @@ Never add inline entries below the index — put content in the knowledge file a
 - [webui PHP & testing](knowledge/webui-php.md) — PHPUnit, steering exceptions, no-vendor-symlink traps
 - [Local devbox docker stack](knowledge/devbox.md) — docker compose, angular-ui, dev-lazy build, worktree swap, restart recovery + RTP save quirks, OrbStack docker context
 - [API contracts & Jira](knowledge/api-contracts.md) — v2 hygiene, Jira search, field IDs, ADF, Atlassian curl, Confluence v2 footer-comments (MARKDOWN), Jira v3-404 → retry v2
-- [Frontend patterns](knowledge/frontend.md) — Angular interceptors, React/RQ/TanStack, Vitest, flags, npm/pnpm, abs-pos margin no-op, `h-full`/`truncate` CSS traps, jest mock traps (globalThis holder, rejects re-invoke), MFE wrapper READY event, dropdown/Popover unmount behavior, MSW `server.use` LIFO
+- [Frontend patterns](knowledge/frontend.md) — Angular interceptors, React/RQ/TanStack, Vitest, flags, npm/pnpm, abs-pos margin no-op, `h-full`/`truncate` CSS traps, jest mock traps (globalThis holder, rejects re-invoke), MFE wrapper READY event, dropdown/Popover unmount behavior, MSW `server.use` LIFO, RQ5 notify batching vs `act()`
 - [Infra: Nginx, K8s, GH Actions](knowledge/infra.md) — ngweb_mf fallback, auth_request masquerade, local action refs, pns_deploy zero-pad verify
 - [Process & tooling](knowledge/process.md) — debugging discipline, caveman comments, RTK proxy (grep/`git show` mangling, worktree-guard false positives), sandbox behaviors (TLS, yarn/push, monitors), openspec archive/validate gotchas, background Bash wrapper, Figma MCP rate limits, stash-baseline proofs, i18n value check
 - [vanguard (netskope-qe/vanguard E2E)](knowledge/vanguard.md) — uv sync extras, KB batch-mode branch strategy

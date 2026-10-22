@@ -241,6 +241,5 @@ inputs X/Y, or approve the pending environment on the run page) and stop.
 
 ## Cross-references
 
-- `create-indie-mf-sidecar` — builds the sidecar pipeline wiring (the inverse
-  of this skill; use when a service has no sidecar workflows yet).
+- The sidecar-setup phase of `/create-indie-mf` / `/create-indie-ms` — builds the integrated PR-sidecar wiring (the inverse of this skill; use when a service has no sidecar yet). The standalone `/create-indie-mf-sidecar` and `/create-indie-ms-sidecar` skills have been removed; sidecar setup is now folded into the indie skills.
 - Cluster aliases resolve via `ngweb-actions/configs/clusters.conf`.

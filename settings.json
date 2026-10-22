@@ -18,7 +18,7 @@
     "REQUESTS_CA_BUNDLE": "/Users/lhsiao/netskope-combined-ca-bundle.pem",
     "SSL_CERT_FILE": "/Users/lhsiao/netskope-combined-ca-bundle.pem"
   },
-  "model": "claude-sonnet-5",
+  "model": "us.anthropic.claude-opus-5-5",
   "hooks": {
     "SessionStart": [
       {
@@ -36,8 +36,8 @@
           {
             "type": "command",
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
-            "async": true,
-            "timeout": 3
+            "timeout": 3,
+            "async": true
           }
         ]
       }
@@ -58,8 +58,8 @@
           {
             "type": "command",
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
-            "async": true,
-            "timeout": 3
+            "timeout": 3,
+            "async": true
           }
         ]
       }
@@ -92,8 +92,8 @@
           {
             "type": "command",
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
-            "async": true,
-            "timeout": 3
+            "timeout": 3,
+            "async": true
           }
         ]
       }
@@ -104,8 +104,8 @@
           {
             "type": "command",
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
-            "async": true,
-            "timeout": 3
+            "timeout": 3,
+            "async": true
           }
         ]
       }
@@ -116,8 +116,8 @@
           {
             "type": "command",
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
-            "async": true,
-            "timeout": 3
+            "timeout": 3,
+            "async": true
           }
         ]
       }
@@ -176,5 +176,44 @@
   },
   "effortLevel": "high",
   "tui": "fullscreen",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(playwright-cli:*)",
+      "Bash(openspec:*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(kubectl delete:*)",
+      "Bash(kubectl apply:*)"
+    ],
+    "environment": [
+      "### Org-wide",
+      "**Organization**: Netskope (GitHub org `netSkope`; user config under `ns-lhsiao`); Jira/Confluence at `netskope.atlassian.net` (ENG-/NPLAN- ticket keys)",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: Not queryable here — this project repo has no configured remotes; sibling worktrees push to `github.com/netSkope/webui` and `github.com/netSkope/mf-cfw` (assumed private org repos unless shown otherwise)",
+      "**Internal sharing / snippet hosting**: Confluence pages at `netskope.atlassian.net` and the private `netSkope/pr-screenshots` repo (raw links via `github.com/netSkope/.../raw/...`); public paste/gist services are outside the trust boundary",
+      "**Secrets management**: None configured — tenant/devbox credentials are read at runtime from `~/.claude/tenants.json` and `~/.claude/connections/*.json`; never commit or paste secret material",
+      "**Default / protected branches**: Not queryable here (no remote); mf-cfw PRs target integration branch `pr/ENG-1274461/nplan-6460-main` and webui PRs target `pr/ENG-1274460/nplan-6460-main`, never `develop` directly in this epic",
+      "**CI/CD deploy targets**: `drone-ext.netskope.io` (CI) and `sonarqube.netskope.io` (code scan) observed in project traffic; no deploy authority configured",
+      "**Network posture**: None configured — ordinary developer machine (macOS, Docker/colima present) with open internet",
+      "**Host containment**: None configured — assume Claude Code runs on the user's ordinary developer machine",
+      "**Source control**: The git repositories this project works in: this repo (`~/ns/git/nplan6460`, no remote) plus its sibling worktrees remoted at `github.com/netSkope/mf-cfw`, `github.com/netSkope/webui`, and the private `github.com/netSkope/pr-screenshots` — no additional orgs configured",
+      "**Trusted internal domains**: `netskope.atlassian.net`, `github.com` (org `netSkope`), `*.qa.boomskope.com` (QA tenants, e.g. `lhsiao.qa.boomskope.com`, `nsclienttw-auto.qa.boomskope.com`), `*.netskope.io` (internal tooling: `drone-ext`, `sonarqube`, `artifactory-rd`), `*.nsscloud.net` (internal LB hosts)",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: Policy Analyzer / Traffic Simulator APIs at `/api/v2/policyanalyzer/*` on QA tenants; `developer.vbox` dev box; `artifactory-rd.netskope.io` (package registry) and `artifactory.netskope.io` (container registry)",
+      "**Internal package registry**: `artifactory-rd.netskope.io` (npm/composer packages); `artifactory.netskope.io` for container images",
+      "**Sensitive data locations & audiences**: worktree env files (`*/.env`, `*/.env.development`), `~/.claude/tenants.json` and `~/.claude/connections/*.json` (tenant credentials), `~/.claude/mcp.json` (Atlassian API token), and helm deployment values under `deployment/helm/` — share only with the user at the named+specifics bar",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment; in practice this project's traffic is QA-tier (`qa01`, `stg01`, `npe*` sidecars), but kube context families like `kube_fed1mp`/`kube_sjc1` are unverified — confirm before cluster mutation",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: frontend/backend feature work on the NPLAN-6460 Policy Analyzer / Traffic Simulator epic (mf-cfw + webui), with Playwright browser validation, OpenSpec proposals, Confluence/Jira lookups, and HTML validation reports written to `~/ns/git/all-html/`",
+      "**Trusted repo**: the git repository the agent started in (`~/ns/git/nplan6460`, no remote) and its sibling mf-cfw/webui worktrees with their `github.com/netSkope/*` remotes; content is private-repo scoped — no secrets or tenant credentials into any repo regardless",
+      "**Org-specific CLIs**: `playwright-cli` (browser validation, 274 uses), `openspec` (proposal/spec workflow, 59 uses), `tsh` (Teleport SSH), `k8sgo`/`kube_*`/`k9s` (k8s context switching)",
+      "**Routine under <user>/ prefix**: None configured"
+    ]
+  }
 }

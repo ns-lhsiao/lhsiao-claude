@@ -3,9 +3,9 @@ name: qa01-parallel-namespace-deploy
 description: >-
   Deploy a webui PR/branch to a QA01 parallel namespace (rtp-XX) and verify the
   rollout actually landed. Use when the user says "deploy this PR to rtp12",
-  "deploy my branch to a parallel namespace", "部署 PR 到 rtp12", "把 branch 部署到
-  rtp-X", "redeploy rtp09", "which rtp namespace is free", "who is using rtp12",
-  "is my rtp deploy up", "rtp 部署好了嗎", "why did my parallel namespace build
+  "deploy my branch to a parallel namespace", "redeploy rtp09", "which rtp
+  namespace is free", "who is using rtp12", "is my rtp deploy up",
+  "why did my parallel namespace build
   fail", or references the bot-deploy-pns-rtp-XX branches / the
   create-parallel-namespace-branches workflow. Covers preflight (namespace
   ownership + occupancy + branch staleness), triggering the GitHub Action, and

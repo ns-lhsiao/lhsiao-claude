@@ -194,3 +194,8 @@
 ## MSW `server.use` overrides are LIFO — register AFTER the default handlers or the fixture wins silently (2026-10-19)
 - In a vitest suite that calls a `setup()` helper doing `server.use(...featureHandlers)`, an override registered BEFORE setup (e.g. `server.use(http.patch(..., 412))` then `setup()`) is PREPENDED-BY-ORDER-OF-REGISTRATION such that the later feature handlers take precedence: the PATCH hit the fixture 200, mutateAsync resolved, modal closed, and the assertion on the conflict banner got `undefined`. Looked exactly like a product-code bug (error state never set) — cost a debug round before a state probe showed `state.kind === 'closed'` (success path ran).
 - Fix: always register route overrides AFTER the setup that installs the base handlers (matches the existing "Register the 500 AFTER setup() so it prepends and wins" comment pattern in useConfigModalController.test.tsx). Quick discriminator for "did my override even fire": probe post-submit state — success/close vs error means fixture won.
+
+## React Query 5: `act()` does not flush observer notifications (2026-10-22)
+- Symptom: after `fireEvent.click(refresh)` inside `await act(async …)`, queryFn was called (mock count 2) but component never re-rendered — `isFetching`-driven `disabled` still false.
+- Cause: RQ5 `notifyManager` schedules observer notifications on `setTimeout(0)`; `act` only drains microtasks.
+- Fix: assert fetch-state-driven UI with `await waitFor(() => expect(btn).toBeDisabled())`, not a sync expect after `act`. (mf-cfw ENG-1270527 HistoryRunPanel refresh test.)

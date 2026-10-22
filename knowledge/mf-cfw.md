@@ -109,3 +109,12 @@
 
 - Worktree `node_modules` symlinks to another worktree; craco/ts-node loads `@swc/core` darwin-arm64 `.node` → sandbox blocks dlopen. `tsc`/`eslint` fine in sandbox; jest not. Rerun `yarn test <path>` with `dangerouslyDisableSandbox: true` — passes (21 suites/239 tests for trafficSimulator).
 - Sandbox Bash also can't write to sibling worktrees or `~/.claude/knowledge` (`operation not permitted`); use Edit/Write tools for those.
+
+## Side-panel fetch UI + lint/preview traps (ENG-1270527, 2026-10-22)
+
+- `SidePanelV2` does not forward `data-testid` to the DOM — `getByTestId('…-panel')` fails even while open. Assert on an element inside the panel (e.g. the TopBar refresh button) instead.
+- `t('key')` returns `DefaultTFuncReturn` (includes `null`): fine on `@netskope-ui` components, but a plain `<div aria-label={t(…)}>` fails tsc TS2322. Use `t(…) ?? undefined`.
+- `npx eslint .` piped to `grep error` shows nothing (default formatter). Use `npx eslint . -f unix | grep "\[Error"` to list errors; `yarn lint` runs theme check + tsc first, so tsc errors mask eslint ones until fixed.
+- `prefer-destructuring` fires on `const x = new AbortController().signal` and `mock.calls[0][0]` in tests: use `const { signal } = …` / `const [[url]] = mock.calls`.
+- `mf-cfw-preview-harness` skill template assumes a clean worktree + throwaway route + revert. When the preview route is already committed and the worktree is intentionally dirty with the feature, tell the sub-agent explicitly: no dirty-stop, no route edit, no revert, `git status` must be unchanged.
+- zsh: `npx prettier --write $files` with a newline-separated var does not split. Write the list to `$TMPDIR/files.txt` and use `xargs npx … < file`.

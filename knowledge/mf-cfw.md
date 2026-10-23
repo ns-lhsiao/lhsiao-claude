@@ -118,3 +118,9 @@
 - `prefer-destructuring` fires on `const x = new AbortController().signal` and `mock.calls[0][0]` in tests: use `const { signal } = …` / `const [[url]] = mock.calls`.
 - `mf-cfw-preview-harness` skill template assumes a clean worktree + throwaway route + revert. When the preview route is already committed and the worktree is intentionally dirty with the feature, tell the sub-agent explicitly: no dirty-stop, no route edit, no revert, `git status` must be unchanged.
 - zsh: `npx prettier --write $files` with a newline-separated var does not split. Write the list to `$TMPDIR/files.txt` and use `xargs npx … < file`.
+
+## `@netskope-ui/search-filter` live driving + policyanalyzer jql behavior (2026-10-23, PR #613)
+- MULTI_SELECT chip: click the inner `button "Select"` (or its current-value label e.g. "Deny + 1 more"), not the "Matched Action:" text — that only focuses. `onQueryStringChangeCoarse` fires when the popover CLOSES via outside click; Escape does not close it. TEXT_SEARCH commits on Enter only (typing sends nothing).
+- Real BE (`GET /simulate/history?jql=`) rejects bad jql with HTTP 400 `code 400002` "Request validation failed" (unsupported attribute; malformed IN). Lenient elsewhere: `action = ` (empty), unquoted `matched_rule ~ x`, trailing backslash all 200/total 0. Single value serializes as `=`, multi as `IN ("a", "b")`.
+- QA tenant session times out during a long user pause (page shows "Session Timeout") — re-run `/locallogin` fill flow, then `location.hash` nav.
+- Long multi-step `run-code` scripts: one bad locator burns 30s and returns only `TimeoutError` with no partial state — pass `{timeout:8000}` per click and keep scripts to one interaction phase.

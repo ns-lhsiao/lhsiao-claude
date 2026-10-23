@@ -18,7 +18,7 @@
     "REQUESTS_CA_BUNDLE": "/Users/lhsiao/netskope-combined-ca-bundle.pem",
     "SSL_CERT_FILE": "/Users/lhsiao/netskope-combined-ca-bundle.pem"
   },
-  "model": "us.anthropic.claude-opus-5-5",
+  "model": "us.anthropic.claude-sonnet-5-5",
   "hooks": {
     "SessionStart": [
       {
@@ -38,6 +38,16 @@
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
             "timeout": 3,
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "^(startup|resume|clear|compact|fork)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '/Users/lhsiao/.claude/hooks/herdr-agent-state.sh' session",
+            "timeout": 10
           }
         ]
       }

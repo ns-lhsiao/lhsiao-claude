@@ -1,5 +1,13 @@
 # Claude Memory
 
+## Language
+
+Default to Traditional Chinese (繁體中文) for all replies, regardless of the
+language the user writes in. Keep code, identifiers, commit messages, PR text,
+and technical terms in their original form; technical nouns may stay in English
+when that is the natural usage. Switch to another language only when the user
+explicitly asks.
+
 ## How to Interact With Humans
 
 You are working with experienced software engineers at Netskope. They are skilled

@@ -258,3 +258,9 @@
 ## Sandbox `$TMPDIR` differs from unsandboxed `$TMPDIR` (2026-10-23)
 - Wrote a script to `$TMPDIR/x/server.js` in a sandboxed call (`/tmp/claude-501/...`), then ran `node $TMPDIR/x/server.js` with sandbox off → `MODULE_NOT_FOUND` at `/var/folders/.../T/x/server.js`. The var expands differently per mode. Fix: use an absolute path (`/tmp/claude-501/<dir>/`) for any file shared between sandboxed and unsandboxed calls.
 - Never dump a `~/.claude/tenants.json` entry with a key-name mask (`'pass' in key`) — it leaked `api_token`. Print only the needed field (`['url']`) or key names; read secrets into shell vars (`P=$(python3 -c ...)`) and pass `"$P"`.
+
+## Reading private Google Sheets (2026-10-23)
+- Reuse docshare's SSO profile: `playwright-cli -s=gsheet open <sheet-url> --headed --profile=$HOME/.playwright-cli-profile-netskope-sso` (clear `Default/Sessions` + `Current/Last Session|Tabs` first, as docshare.sh does). Needs `dangerouslyDisableSandbox`.
+- Tab names: `eval "() => [...document.querySelectorAll('.docs-sheet-tab-name')].map(e=>e.textContent)"`.
+- Data: same-origin `fetch('/spreadsheets/d/<id>/export?format=tsv&gid=<gid>')` inside `eval`. **Not** `gviz/tq?tqx=out:csv` — gviz guesses header rows and drops/merges header cell text.
+- Red-text PM annotations + strikethrough + comments only visible in a screenshot / Comments panel (top-bar comment icon), not in the export.

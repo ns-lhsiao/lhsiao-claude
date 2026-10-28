@@ -102,6 +102,18 @@
 ## OpenAPI with no `required` list: type every field optional, or live tenants crash render (2026-10-21, mf-cfw PR #605)
 
 - Spec v50 (Confluence 8036483474) lists NO `required` on any policyanalyzer schema. FE typed Simulate match fields required; live `POST /simulate` returned `{policy_order, policy_name, enabled, action}` only, and `MatchCardBody` `match.users.length` threw in render (per-tab boundary hid all results). I had also told the user "users/tags are required in spec" from reading the property list — wrong; parse the schema with PyYAML and check `required` explicitly before claiming it.
+
+## dev-proxy pitfalls: full-host escape + hidden port map (2026-10-28, ENG-1341202)
+
+- **Never `open http://localhost:9797/auth/login`** — `/auth/login` is NOT in the dev-URL list, so it falls to fallbackProxy and the tenant 303 chain escapes to `https://<tenant>/...`; from then on the page loads the DEPLOYED MFE, not your local build (symptom: toggle sends POST from old code). Login via `http://localhost:9797/ns` (exact-match dev URL) or `/locallogin`; after landing on the tenant host, recover by `open http://localhost:9797/ns` and re-login on localhost.
+- **Proxy ports are hardcoded in `src/main.ts`, NOT 8014**: `/mf/cfw/*` → `localhost:8034`, `/mf/shell/*` → `localhost:3000`. Start craco with `PORT=8034 WDS_SOCKET_PORT=8034`. The boot-playwright mf-cfw recipe's "8014" applies to direct Cypress mode, not dev-proxy mode.
+- Verify WHICH build served the page before asserting request-method changes: `document.querySelectorAll('script[src]')` — script src must be `localhost:9797/mf/cfw/remoteEntry.js`, not `https://<tenant>/mf/cfw/...`.
+- XHR method monitor (axios uses XHR): wrap `XMLHttpRequest.prototype.open` via playwright-cli eval, collect `{method,url,status}` into `window.__reqs` on 'load', then `JSON.stringify(window.__reqs.filter(r=>r.url.includes('<path>')))`.
+- playwright-cli `cookie-list` output includes prose wrappers (`### Result`, ```js fences```) — parse with regex `([a-z_]+)=([^ (]+) \(domain` and join as `name=value; name2=value2` single line for sweep-fit-check's probe_fit.py (newlines in the header value → ValueError: Invalid header value).
+- Vite/webpack curl probe on localhost may 000 with `curl http://localhost:PORT` (IPv6 ::1 race) but 200 via `http://127.0.0.1:PORT` — probe 127.0.0.1 before concluding the server is down.
+- yarn install inside the sandbox can exit 0 with an EMPTY node_modules (network retries swallowed); `craco: command not found` at test time is the symptom. Re-run `yarn install --frozen-lockfile` with sandbox disabled.
+- login form selectors: `/auth/login` uses `role=textbox[name="Username or email address"]` + `role=button[name="Log in"]`; `#username`/`#btn-sign-in` belong to `/locallogin`. Filling immediately after `open` can land on the wrong page — snapshot first.
+- playword-cli playwright-cli command output ECHOES `fill` values (password leak to transcript) — redirect fill/click stdout to /dev/null in scripted login blocks.
 - Fix pattern: optional types (tsc then lists every reader), guard arrays at the ONE shared renderer, hide absent rows/pills rather than defaulting (absent `enabled` rendered "Disabled" = a lie).
 - Also: `/tmp/claude/` got wiped between days — a page generator script and its input JSON vanished. Keep re-runnable generators next to the report (or edit the HTML directly) when a doc will be iterated over several days.
 
@@ -124,3 +136,11 @@
 - Real BE (`GET /simulate/history?jql=`) rejects bad jql with HTTP 400 `code 400002` "Request validation failed" (unsupported attribute; malformed IN). Lenient elsewhere: `action = ` (empty), unquoted `matched_rule ~ x`, trailing backslash all 200/total 0. Single value serializes as `=`, multi as `IN ("a", "b")`.
 - QA tenant session times out during a long user pause (page shows "Session Timeout") — re-run `/locallogin` fill flow, then `location.hash` nav.
 - Long multi-step `run-code` scripts: one bad locator burns 30s and returns only `TimeoutError` with no partial state — pass `{timeout:8000}` per click and keep scripts to one interaction phase.
+
+## Local mf-cfw build inside the REAL tenant shell (mfe-shell-proxy on CRA/craco) (2026-10-28, analyze-export-csv)
+- Worked: TEMP `devServer` fn in `craco.config.ts` (revert with `git checkout -- craco.config.ts`): `setupMiddlewares` unshift strips `/mf/cfw` prefix and sets `req.__local`; `proxy:[{context:(p,req)=>!req.__local, target: tenant, changeOrigin, secure:false, cookieDomainRewrite:'', onProxyRes}]`; `hot:false, liveReload:false, webSocketServer:false`. Run `PORT=8030 WDS_SOCKET_PORT=8030 BROWSER=none yarn start`. Inject `ci_session`/`auth_session` via `playwright-cli cookie-set <n> <v> --domain=localhost --path=/` (from a 0600 file, never print), open `http://localhost:8030/ns#/inline-policy-page`.
+- CSP trap: shell `style-src` carries a `'nonce-…'`, which makes an appended `'unsafe-inline'` IGNORED -> inline `style=` blocked -> side panel mis-positioned (TopBar under shell header, clicks intercepted by "Open User Account Settings"). Strip `'nonce-…'` from `style-src*` when relaxing, then restart + reload. The mfe-shell-proxy skill's relax snippet does not do this.
+- Capture a client-side download: `playwright-cli run-code` has no `require`; the `download` event never fired (blob-anchor). Patch `URL.createObjectURL` in-page, click, read `Blob.arrayBuffer()` and `return` the text from run-code. A failing run-code can kill the session ("browser not open") -> reopen + re-inject cookies.
+- `playwright-cli cookie-list` prints cookie VALUES; also my `sed` redaction missed them. Pipe straight to a 0600 file in a script (see 2026-10-15 note).
+- Button label text is CSS-uppercased: `innerText.includes('Analyze Policies')` is false; use case-insensitive match. Menu clicks right after reload race: wait a few seconds.
+- lhsiao.qa `POST /analyze` is spec-shaped (`{data, success}`) as of 2026-10-28; the 2026-10-07 "flat shape" note in nplan6460/CLAUDE.md was stale.

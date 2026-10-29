@@ -264,3 +264,6 @@
 - Tab names: `eval "() => [...document.querySelectorAll('.docs-sheet-tab-name')].map(e=>e.textContent)"`.
 - Data: same-origin `fetch('/spreadsheets/d/<id>/export?format=tsv&gid=<gid>')` inside `eval`. **Not** `gviz/tq?tqx=out:csv` — gviz guesses header rows and drops/merges header cell text.
 - Red-text PM annotations + strikethrough + comments only visible in a screenshot / Comments panel (top-bar comment icon), not in the export.
+
+## `$TMPDIR` differs sandboxed vs `dangerouslyDisableSandbox` (2026-10-29)
+- Sandboxed Bash `$TMPDIR` = `/tmp/claude-501`; unsandboxed it is the macOS `/var/folders/.../T/`. A file written to `$TMPDIR` in a sandboxed call is "No such file" in a later unsandboxed call. Use the literal `/tmp/claude-501/...` path when a temp file crosses that boundary.

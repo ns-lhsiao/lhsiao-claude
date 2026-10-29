@@ -50,3 +50,4 @@
 
 ## lhsiao.qa login: `/locallogin` redirects to `/auth/login` (2026-10-28)
 - `open .../locallogin` landed on `/auth/login` (different form), so `#username`/`#password`/`#btn-sign-in` all fail ("does not match any elements"). Use `input[placeholder="Username/Email"]`, `form[aria-label="Login form"] input[type="password"]`, `button:has-text("Log in")`; success URL `/ns#/dashboard`. Snapshot first when an id selector misses.
+- **`page.goto(sameUrl#hash)` does NOT reload** when only the hash matches the current URL — MFE remote stays the old build (same `remoteEntry.js?_=` stamp). After a dev-server rebuild use `page.reload()` in `run-code`; verify via the remoteEntry `?_=` timestamp changing (2026-10-29).

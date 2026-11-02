@@ -270,3 +270,10 @@
 
 ## openspec CLI must run from the repo root (2026-11-02)
 - `openspec instructions <artifact> --change X --json` run with cwd inside `openspec/changes/X/` prints non-JSON → `JSONDecodeError`. `cd` to the worktree root first. `openspec archive <old> -y` before archiving a change whose MODIFIED delta targets the old change's unarchived spec (else no main spec to modify); `-y` continues past incomplete tasks.
+
+## mf-cfw local ai-review run recipe (2026-11-02)
+- Repo tooling: `.github/ai-review/review.py` (select/prepare/run/publish), model Kimi K3 via Fireworks, opencode 1.18.12 pinned (CI downloads linux-x64; local arm64 build worked). `FIREWORKS_API_KEY` in ~/.zshrc.
+- CI review dies on PRs > 6,000 changed lines (`MAX_CHANGED_LINES` in prepare.py) — PR #609 rollup at 30k lines. Local workaround: hand-build manifest (base/head sha, prior_findings, review_scope) + context.md (header + incremental diff + prior-finding files at head), reuse/refresh a snapshot dir, write opencode.json via the `write_runtime` permission block in review.py, then `structured.py <opencode-bin> <progress.json> < input.bin > transcript.jsonl` with the XDG/OPENCODE_* env from `runtime_environment`.
+- **Snapshot overlay trap**: when reusing a prior run's snapshot for a new head, overlay EVERY changed file from `git diff --name-only`, including `__tests__/` files and deletions (`git cat-file -e` to test existence). Partial overlay (source only, no tests) makes the model report phantom bugs ("test file not updated") that are artifacts of the stale snapshot — cross-check claimed "missing fix" findings against `git show <head>:<file>` before posting.
+- Parse result with `parse_structured_transcript(text, manifest, input_bytes)` from verdict.py; CI `publish.py` requires bot-marker ledger — for local runs post a plain PR comment instead. Prior run artifacts: `/tmp/claude-501/ai-review-local-649/`.
+- gh/gh api hit `tls: failed to verify certificate: x509: OSStatus -26276` under sandbox (corp MITM cert not in sandbox keyring) → run with `dangerouslyDisableSandbox`.

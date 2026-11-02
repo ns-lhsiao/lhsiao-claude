@@ -50,5 +50,12 @@
 ## Jira REST v3 GET issue 404s for some tickets; v2 works (2026-10-20)
 - `GET /rest/api/3/issue/ENG-1369097` returned 404 "Issue does not exist or you do not have permission" with valid Basic auth (mcp.json `atlassian` env keys: `ATLASSIAN_USER_EMAIL` + a `*_TOKEN` — not `JIRA_EMAIL`). Same ticket via `/rest/api/2/issue/...` returned 200 with all fields. Don't conclude "ticket missing" from a v3 404 — retry v2.
 
+## Creating ENG Deployment tickets via REST (2026-11-02)
+- Issue type id `10940` (Deployment) enforces **ticket linking on create**: POST returns `{"errorMessages":["Link tickets that associated with this deployment ticket"]}` with no `errors`. Fix: include `"update": {"issuelinks": [{"add": {"type": {"name": "Relates"}, "outwardIssue": {"key": "ENG-..."}}}]}`. `issuelinks` under `fields` fails with `'SET' operation is not supported` — must go through `update.add`.
+- `description` must be ADF. Wiki markup string (`h2.`, `{{code}}`) → `400 "not valid Atlassian Document Format"`. Example ticket's exact structure: h2 heading "Slack channel: *TBD*", code-marked version lines, `bulletList` of `inlineCard` nodes (`{"type":"inlineCard","attrs":{"url":"https://netskope.atlassian.net/browse/ENG-..."}}`).
+- `customfield_20803` (Customer/Service Impact) needs array form: `[{"id":"22961"}]`, not `{"id":"22961"}`.
+- Working field set: components `10003`, `customfield_15000` (subcomponent, array of option ids — can pass multiple), `customfield_23296=26378` (business hours NO), `customfield_17018=22978` (Scheduled), `customfield_20823` (release version string), `customfield_17653` (release date `YYYY-MM-DD`), `customfield_17280` (datacenters, `19387`=ALL MP), `customfield_20806/20807` datetime strings, labels `["auto-close-30d"]`.
+- Pre-filled create URL (`CreateIssueDetails!init.jspa`) was NOT validated — went straight to REST after user confirm. Curl auth per the mcp.json note above.
+
 ## /api/v2/balkan/* mirrors v1 PHP option sources (2026-11-02)
 - Bearer `api_token` works on `POST /api/v2/balkan/completions/{getAllCountries,getAllBrowsers,filterAllAppNames}` and `/api/v2/balkan/inline_policies/getAllUsers`: same body (`prefix`,`limit`,`hideDiscoveryOnly`,`pageName`) and same `{status,msg,data}` envelope/rows as v1. v1 paths 401 under Bearer (need `ci_session`+CSRF), so v1 vs v2 can't be diffed with curl. Browser cookie session needs no CSRF token on v2 (live-verified). webui2's `GET /balkan/applications`, `/balkan/users` use a different `{data,success}` shape — don't mix. Use `curl -4` for lhsiao.qa.

@@ -144,3 +144,6 @@
 - `playwright-cli cookie-list` prints cookie VALUES; also my `sed` redaction missed them. Pipe straight to a 0600 file in a script (see 2026-10-15 note).
 - Button label text is CSS-uppercased: `innerText.includes('Analyze Policies')` is false; use case-insensitive match. Menu clicks right after reload race: wait a few seconds.
 - lhsiao.qa `POST /analyze` is spec-shaped (`{data, success}`) as of 2026-10-28; the 2026-10-07 "flat shape" note in nplan6460/CLAUDE.md was stale.
+
+## Jest baseline: 18 suites fail with raw i18n keys on the integration branch (2026-11-02)
+- `scripts/i18n-merge.mjs` merges only 8 namespaces, so `traffic_simulator.*` / `policy_analyzer.*` are absent from `public/locales/en/translation.json`; tests render `traffic_simulator.results.pattern_title` instead of English (~118 failures, identical with changes stashed). `yarn i18n` does not fix it. Not caused by feature work — prove with `git stash -- src` baseline and note in the PR. Live shell-proxy builds show the same raw keys unless the proxy serves a merged `translation.json` (do it in the proxy script, not the repo).

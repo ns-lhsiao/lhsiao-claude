@@ -267,3 +267,6 @@
 
 ## `$TMPDIR` differs sandboxed vs `dangerouslyDisableSandbox` (2026-10-29)
 - Sandboxed Bash `$TMPDIR` = `/tmp/claude-501`; unsandboxed it is the macOS `/var/folders/.../T/`. A file written to `$TMPDIR` in a sandboxed call is "No such file" in a later unsandboxed call. Use the literal `/tmp/claude-501/...` path when a temp file crosses that boundary.
+
+## openspec CLI must run from the repo root (2026-11-02)
+- `openspec instructions <artifact> --change X --json` run with cwd inside `openspec/changes/X/` prints non-JSON → `JSONDecodeError`. `cd` to the worktree root first. `openspec archive <old> -y` before archiving a change whose MODIFIED delta targets the old change's unarchived spec (else no main spec to modify); `-y` continues past incomplete tasks.

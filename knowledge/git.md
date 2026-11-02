@@ -125,3 +125,8 @@
   `${=FILES}` (forces word-split) if a variable is required. Applies to vanguard's
   local-pr-review.md phase and any other multi-file git command built from a joined string.
 - Same zsh flavor: `echo ===` fails with "== not found" — zsh does `=word` command-path expansion on args starting with `=`. Quote it: `echo "==="`.
+
+## Sibling-repo git writes from a different cwd; stale integration base (2026-11-02)
+- Session cwd `nplan6460` is the only sandbox-writable repo dir. `git worktree add` / `git fetch` / `git commit` in `../mf-cfw` fail with `cannot lock ref ... Operation not permitted` / `cannot open '.git/FETCH_HEAD'`. Run them with `dangerouslyDisableSandbox: true` (reads are fine).
+- A long-lived integration branch (`pr/ENG-1274461/nplan-6460-main`) gets force-rebased: `origin/…` seen at branch time can be stale. Symptom: `[ahead 105, behind 107]`, "skipped previously applied commit". Always `git fetch` immediately before `worktree add` AND before `gh pr create`; fix with `git rebase origin/<base>`, drop stray empty "Retrigger CI" commits via `git rebase --onto origin/<base> <stray> HEAD`, then `git checkout -B <branch> HEAD` (the `--onto … HEAD` form leaves a detached HEAD).
+- zsh: `echo ======` errors `= not found` (`=cmd` expansion) and aborts the rest of a `;` chain. Use `echo -----`.

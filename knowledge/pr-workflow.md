@@ -76,3 +76,7 @@
 ## `gh pr create --reviewer` wants GitHub logins, not email prefixes; resolve from commit history (2026-10-12)
 - `gh pr create --reviewer rdecastrosilva` (email prefix from `git log --format='%an <%ae>'`) created the PR fine but failed the reviewer step: `GraphQL: Could not resolve user with login 'rdecastrosilva'`. Netskope logins carry an `ns-` prefix invisible in git email data.
 - Resolve real logins from the repo's own commit metadata: `gh api "repos/<o>/<r>/commits?path=<touched-file>&per_page=10" --jq '.[].author.login'`, then `gh api -X POST repos/<o>/<r>/pulls/<n>/requested_reviewers -f 'reviewers[]=<login>'`. Verify with `gh pr view <n> --json reviewRequests`.
+
+## No push access to an internal repo → fork + cross-repo PR (2026-10-30)
+- `git push -u origin <branch>` on `netSkope/agentops-tunnel` failed `Write access to repository not granted`. Check up front: `gh api repos/<o>/<r> --jq '{allow_forking,permissions}'` (`permissions.push=false` → fork path; webui2 PR #3840 was also contributed from a fork).
+- Flow: `gh repo fork <o>/<r> --clone=false` (do NOT pass `--remote=false`: it dumps the usage text and creates no fork), `git remote add fork https://github.com/<login>/<r>.git`, `git push -u fork <branch>`, then `gh pr create --repo <o>/<r> --base develop --head <login>:<branch>`. The fork of an internal repo is created PRIVATE; creating it is an outward action, so confirm with the user first.

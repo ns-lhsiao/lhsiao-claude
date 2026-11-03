@@ -11,12 +11,22 @@ Read `../SKILL.md` first for the shared session/login/nav/reporting mechanics.
 
 | Thing                  | Base   | Offset expr        |
 |-------------------------|--------|--------------------|
-| mf-client dev server   | 8017   | `8017 + SLOT*100`  |
+| mf-client dev server   | 8017   | see note below     |
 | development-proxy      | 9797   | `9797 + SLOT`       |
 
 ```bash
-MFCLIENT_PORT=$((8017+SLOT*100)); PROXY_PORT=$((9797+SLOT))
+MFCLIENT_PORT=8017; PROXY_PORT=$((9797+SLOT))
 ```
+
+> **mf-client dev server stays on the BASE port 8017, not `8017 + SLOT*100`.**
+> The devbox `web` container's nginx (`/mf/client` location block) hardcodes
+> upstream `host.docker.internal:8017`, so a SLOT-offset dev server silently
+> 502s `remoteEntry.js` — the page shell renders but the MFE panel never
+> mounts. The offset scheme only ever applied to the per-slug (no-login) mode,
+> and even there nothing rewrote the container's upstream. Only one mf-client
+> dev server can run at a time across all envs; kill any stale one on 8017
+> first (`lsof -ti :8017 | xargs kill`). Confirmed again 2026-11-03
+> (ENG-1397963) — the old `8017 + SLOT*100` formula in this table was wrong.
 
 `developer.vbox` resolves to `127.0.0.1`, but the base recipe's `web` container
 publishes TLS on `8443+SLOT` — so the dev-proxy for this env must forward to

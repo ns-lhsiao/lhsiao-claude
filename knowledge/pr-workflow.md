@@ -80,3 +80,7 @@
 ## No push access to an internal repo → fork + cross-repo PR (2026-10-30)
 - `git push -u origin <branch>` on `netSkope/agentops-tunnel` failed `Write access to repository not granted`. Check up front: `gh api repos/<o>/<r> --jq '{allow_forking,permissions}'` (`permissions.push=false` → fork path; webui2 PR #3840 was also contributed from a fork).
 - Flow: `gh repo fork <o>/<r> --clone=false` (do NOT pass `--remote=false`: it dumps the usage text and creates no fork), `git remote add fork https://github.com/<login>/<r>.git`, `git push -u fork <branch>`, then `gh pr create --repo <o>/<r> --base develop --head <login>:<branch>`. The fork of an internal repo is created PRIVATE; creating it is an outward action, so confirm with the user first.
+
+## Fork remote exists ≠ fork workflow (2026-11-03, ENG-1397963)
+- mf-client's primary checkout has BOTH `lhsiao` (fork) and `origin`/`netskope` (netSkope/mf-client) remotes. I pushed to the fork and opened a cross-repo PR (#1351) out of habit — user corrected: use an in-repo branch. Verified push access to origin first, re-opened as #1355, closed the fork PR, deleted the fork branch.
+- Rule: when push access to the canonical repo exists, ALWAYS push the topic branch to `origin` and open an in-repo PR. The fork remote is a leftover, not the workflow. Fork path is only for the no-push-access case above.

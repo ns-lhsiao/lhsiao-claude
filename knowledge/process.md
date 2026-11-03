@@ -277,3 +277,5 @@
 - **Snapshot overlay trap**: when reusing a prior run's snapshot for a new head, overlay EVERY changed file from `git diff --name-only`, including `__tests__/` files and deletions (`git cat-file -e` to test existence). Partial overlay (source only, no tests) makes the model report phantom bugs ("test file not updated") that are artifacts of the stale snapshot — cross-check claimed "missing fix" findings against `git show <head>:<file>` before posting.
 - Parse result with `parse_structured_transcript(text, manifest, input_bytes)` from verdict.py; CI `publish.py` requires bot-marker ledger — for local runs post a plain PR comment instead. Prior run artifacts: `/tmp/claude-501/ai-review-local-649/`.
 - gh/gh api hit `tls: failed to verify certificate: x509: OSStatus -26276` under sandbox (corp MITM cert not in sandbox keyring) → run with `dangerouslyDisableSandbox`.
+
+- **zsh `echo ===` trap**: bare word starting with `=` (e.g. `===`) triggers zsh `=cmd` path expansion → `(eval):N: == not found`, aborting the `;` chain. Quote separators: `echo "---"`.

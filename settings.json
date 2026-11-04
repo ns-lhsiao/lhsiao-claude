@@ -18,7 +18,7 @@
     "REQUESTS_CA_BUNDLE": "/Users/lhsiao/netskope-combined-ca-bundle.pem",
     "SSL_CERT_FILE": "/Users/lhsiao/netskope-combined-ca-bundle.pem"
   },
-  "model": "us.anthropic.claude-sonnet-5-5",
+  "model": "glm-5p3-flash[1m]",
   "hooks": {
     "SessionStart": [
       {

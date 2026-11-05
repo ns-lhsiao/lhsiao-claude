@@ -21,3 +21,4 @@ Never add inline entries below the index — put content in the knowledge file a
 - [vanguard (netskope-qe/vanguard E2E)](knowledge/vanguard.md) — uv sync extras, KB batch-mode branch strategy
 - [webui validation advice (boot-bugfix/boot-feature)](knowledge/webui-advise.md) — split evidence by side: Playwright screenshots for Angular/React, curl req/resp + CSRF mark-out/revert for PHP
 - [CM tickets & flag rollouts](knowledge/cm-rollouts.md) — MP deployment windows (UTC table), 1-CM-per-window rule, soak/health-validation requirements, SOP bulk scripts (-s/-t hosts), ng_devices_enabled 4-region split example, BOM3 DC option IDs
+- [Global FF rollout review](knowledge/feature-flag-review.md) — #global-feature-flag-rollout-review process (SRE+Support sign-off, 3-day SLA), health-validation-not-just-success, soak ≥1 business day, capture pre-state in CM comments, IMF-1271/EIMF-154 cautionary tales

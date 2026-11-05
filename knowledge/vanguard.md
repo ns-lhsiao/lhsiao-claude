@@ -113,3 +113,47 @@ Commit convention: conventional commits with product-area scope (`fix(client-con
 `fix(nightly): ...`) — NOT `ENG-NNN:` prefixed (unlike webui/mf-cfw). Ticket key goes in the
 subject parenthetically. No PR template. `core.hooksPath=.githooks` (structural lint, stdlib-only
 — does NOT run ruff; lint.yml CI does).
+
+## Nightly triage toolkit: tenants, flags, builds, artifacts (2026-11-05)
+
+- **Tenant ID lookup**: `src/vanguard/config/environments/<env>.json` → `tenants/<name>.tenant_id`
+  (client2 = 110495). No `~/.claude/connections/stg01.json` needed if you go via the flag CLI.
+- **FF read (stg01/qa01/devint)**: `npx @netskope/flag get <flag> <dc> <tenant_id>`. The CLI shells
+  kubectl with `KUBECONFIG=~/.nsk/<cluster>.yaml` — `nsk` login often dead ("token not specified");
+  just `cp ~/.kube/stork-stg01-mp-iad0-nc4.yaml ~/.nsk/` and it works. Team mode positional args
+  (`flag client <tenant>`) resolve to qa01 and fail — use the explicit `get <flag> <dc> <tenant>` form.
+- **Control flag read**: `kubectl exec` a webui pod, grep `/opt/ns/cfg/ns_ws_control_flags.json`
+  (names are UPPER_SNAKE, e.g. `NPLAN6711_AUTO_REENABLE_NS_CLIENT_AFTER_DISABLEMENT`).
+- **Shell (webui2) build version**: `GET <tenant>/mf/shell/build-info.json` — public, no login,
+  returns `{version, commit, branch}` (vanguard `constants/services.py` knows the path).
+- **Nightly junit/artifacts**: `gh api .../runs/<id>/artifacts` → `leg-client--x-attempt1` zip =
+  junit.xml + leg-status.json (rp_launch_url, service_versions incl. shell build) + per-test
+  `coverage/gw*/` JSONs. Each coverage blob's `timestamp` = test end wall-clock → reconstruct
+  execution order and correlate failures with time (no timestamps in junit itself).
+- **Report Portal**: host `report-portal.webui-qa.us-east-1.npe.aws.nsscloud.net` is NXDOMAIN from
+  laptop/VPN DNS but resolves from inside a tenant webui pod (kubectl exec curl → 401 without key).
+  RP api key lives only in CI secrets — traces/screenshots effectively CI-only unless key provided.
+- **ENG-1397931 (webui2 9a153b988, #3940, merged 2026-11-04 04:28 UTC)**: pre-fix webui2 shell
+  never reset PHP `ns_last_activity` (React pages call v2 APIs only) → active sessions killed at
+  PHP idle gc (1440s) mid-test → redirect to `#/login?reason=loggedout` → *whatever test was
+  running* fails with locator zero-match. Symptom family: "element visible then sibling locator
+  zero-match seconds later", mass flaky 401s, `PageNotLoadedError: Session expired`. Before
+  blaming product/test code on ≤build-3312 nightlies, check whether failures vanish on a
+  post-fix build (3335+). Also explains why single-test local repros pass.
+
+## mypy baseline on main has 1 pre-existing error (2026-11-05)
+
+- `uv run mypy src/` on an unmodified main checkout fails with
+  `src/vanguard/visual/judge.py:24: Cannot find implementation or library stub for module named "anthropic.types"`.
+- For test-only PRs (no src/ changes) this is baseline noise, not a gate blocker — note it in the
+  report instead of chasing it. Verify by running mypy on the same file in the primary checkout.
+
+## Worktree validation without a worktree .venv: primary venv binaries + cwd=worktree (2026-11-05)
+
+- Fresh vanguard worktree has no `.venv`; a full `uv sync --extra ui` there is slow and hits the
+  artifactory/VPN traps. Instead: `<primary>/.venv/bin/{ruff,python}` with `cwd` = worktree.
+  The editable `vanguard` install resolves to primary `src/` — identical content when the PR
+  touches only tests. `pytest` picks up the worktree's conftest via rootdir normally.
+- **`.env` must be copied into the worktree** (it's gitignored, doesn't travel with the worktree)
+  or live runs fail on missing VANGUARD_* settings.
+- Enable hooks per worktree: `git config core.hooksPath .githooks` (config is per-checkout).

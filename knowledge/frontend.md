@@ -203,3 +203,22 @@
 - **UM V2 `/api/v2/users/getusers` filter supports recursive `and`/`or` nesting** (`Filter` schema in `netSkope/api-gateway-endpoints` `production/endpoints/users/usermanager.yaml` — `OrFilter` at ~L1051). Nested `or` of `accounts.userName` / `accounts.emails` / `id` with `co` verified live (dshirsath.qa.boomskope.com, 2026-11-03): each clause matches independently, `co` is case-insensitive on all three. `id` = user's primary email (spec L32). `accounts.userName` = AD UPN (`enterprise_accounts.upn`), NOT email — the ENG-1397736 trap. Tenant REST API v2 tokens look like `nsapi_<hex>_v1` in `Authorization: Bearer`; `rbacv3:<id>` base64 blobs are internal service tokens that Kong rejects with bare `Unauthorized`.
 - **Changing a shared payload-builder (e.g. mf-client `getSearchUserPayload`): grep for call-site tests that assert the payload shape, not just the builder's own test.** `userManager.helper.test.ts` asserts the builder output, but `deviceQuery.helper.test.ts` also asserts `mockGetUsers` was called with the same shape via `userQueryFunction` — updating only the builder's test passes locally (targeted `--testPathPattern`) and fails in CI (full suite). When a helper feeds N wrappers, run the full suites of every consumer file too. Confirmed 2026-11-03 (ENG-1397736, CI sq_scan #1358).
 - **webui Network Events = TWO Angular implementations forked by `separate_cfw_and_npa_events_enabled`** (`app-routing.module.ts` `network-events` route + `network-events-element-root.component.ts` custom-element mount). ON → `SkopeitNetworkEventPageModule`/`skopeit-side-panel`; OFF → legacy `NetworkEventsPageModule`/`WhitelistSidePanelComponent` (static `sidePanelConfig` rows, direct `rowData[row.id]` lookup, no transform). Third surface: webui2 React page under `balkan_phase1_rc_network_events`. ENG-1162885 shipped #19308 on skopeit only → reopened because QA tenant was flag-OFF (legacy row keyed `user_ip` vs payload `userip`). Rule: for any network-event detail/column bug, fix + verify every surface, and when a "fixed" ticket reopens, first confirm build contains fix (`stork-develop-pipeline` `WEBUI_COMMIT_SHA` ancestor check), then which surface the tenant mounts.
+
+## GlobalAttributesPanel (webui2 client-configuration): tab strip renders in PHASES — waiting on tabs[0] proves nothing about metadata (2026-11-05)
+
+- The whole strip is gated `{!isLoading && tabs.length > 0 && <Tabs>…}` with
+  `isLoading = open && (metadataQuery.isLoading || configQuery.isLoading || swgQuery.isLoading)`,
+  but the NPA queries are ALSO gated on `npaEnabled = open && flags.secureAccess` — and
+  `secureAccess` is a `pending: true` flag spec (async resolve from default, ENG-1375140/#3715).
+  Panel-open before flags resolve → SWG query (gated on `open` alone) settles first → `isLoading`
+  briefly false (NPA queries not started = not "loading") → strip renders with ONLY the
+  frontend-defined "Internet Security" tab (count==1) → flags resolve → NPA queries start →
+  strip unmounts (spinner) → remounts with all metadata tabs.
+- E2E consequence: `tabs.locator.first.wait_for(visible)` passes during the transient 1-tab
+  window; any tab-count assertion after it must be retrying
+  (`expect(...).to_have_count(N)`), never a raw `assert locator.count() == N`.
+  Fixed in vanguard PR #1981 (C50131922/C50131927).
+- Same PR family: webui2 #3518 (ENG-1356694) wired `externalProxies` through `useClearWhenHidden`
+  in NetworkIntegrationSection — interoperate-with-proxy uncheck now CLEARS the form array
+  (form-local, no PATCH without modal Save) and re-check re-seeds one EMPTY_ROW editing row;
+  retain-on-recheck no longer holds.

@@ -60,3 +60,10 @@
 
 ## /api/v2/balkan/* mirrors v1 PHP option sources (2026-11-02)
 - Bearer `api_token` works on `POST /api/v2/balkan/completions/{getAllCountries,getAllBrowsers,filterAllAppNames}` and `/api/v2/balkan/inline_policies/getAllUsers`: same body (`prefix`,`limit`,`hideDiscoveryOnly`,`pageName`) and same `{status,msg,data}` envelope/rows as v1. v1 paths 401 under Bearer (need `ci_session`+CSRF), so v1 vs v2 can't be diffed with curl. Browser cookie session needs no CSRF token on v2 (live-verified). webui2's `GET /balkan/applications`, `/balkan/users` use a different `{data,success}` shape — don't mix. Use `curl -4` for lhsiao.qa.
+
+## Creating ENG Bug tickets via REST v3: hidden required fields (2026-11-04)
+- POST `/rest/api/3/issue` (issuetype Bug id `1`) fails in stages beyond createmeta's `required` flags: first `versions` (Affects versions) + `customfield_16676` (Where Bug was found, option: Code Review/Functional Test/…), then `customfield_25830` (Found by automation, Yes/No) — the last one shows `required: false` in createmeta but a validator demands it anyway. Expect 2–3 retries; read each `errorMessages` round-trip.
+- Affects version: `GET /rest/api/3/project/ENG/version` → newest unreleased non-archived (e.g. `23.127` id `39214`).
+- Where Bug was found allowed options via `GET /rest/api/3/issue/createmeta/ENG/issuetypes/1` → `.fields[] | .allowedValues` (option values, e.g. Code Review `19278`).
+- Self-assign: `GET /rest/api/3/myself` → accountId `712020:f420f5c3-...` (Louis), pass as `"assignee": {"id": ...}`.
+- createmeta response shape: top-level `fields` array (no `.projects` wrapper) — jq `.values[]` fails; use `.fields[]`.

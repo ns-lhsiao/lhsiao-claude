@@ -147,3 +147,11 @@
 
 ## Jest baseline: 18 suites fail with raw i18n keys on the integration branch (2026-11-02)
 - `scripts/i18n-merge.mjs` merges only 8 namespaces, so `traffic_simulator.*` / `policy_analyzer.*` are absent from `public/locales/en/translation.json`; tests render `traffic_simulator.results.pattern_title` instead of English (~118 failures, identical with changes stashed). `yarn i18n` does not fix it. Not caused by feature work — prove with `git stash -- src` baseline and note in the PR. Live shell-proxy builds show the same raw keys unless the proxy serves a merged `translation.json` (do it in the proxy script, not the repo).
+
+## Simulate per-field array contract + real Select multi traps (2026-11-06, simulate-multi-value-criteria)
+- lhsiao.qa `POST /simulate` is per-field: source `country`/`os_family`/`browser`/`access_method` + destination `application` accept ONLY `string[]` (scalar -> 400 `400002` "invalid request body"); source `user`/`user_confidence` + destination `country`/`protocol` accept ONLY scalar (array -> 400). Probe each field scalar-vs-array before assuming one shape for all — a single all-fields body just says 400 with no field hint.
+- Real `@netskope-ui/select` Root forwards its `data-testid` onto the `Select.Trigger asChild` button (overrides the trigger's own testid). Click `value-row-<side>-<key>`, not `...-trigger`.
+- Real Select `multiSelect`: `state.selected` only tracks values with a rendered `Select.Item`; stored values missing from options vanish from `onChange` keys on next pick -> carry orphans in the handler. Open multi menu needs an `IntersectionObserver` stub in jsdom.
+- `@netskope-ui/icons` is hand-declared in `src/react-app-env.d.ts`; a real export (e.g. `CheckmarkIcon`) still fails tsc TS2305 until added there.
+- Headless tenant login without leaking creds: standalone `playwright-core` script (from `@playwright/cli`'s node_modules) reads `.env`, fills `/auth/login`, saves `storageState` 0600 -> `playwright-cli -s=<s> state-load <file>`. playwright-cli fill/run-code echo the code (password) in output — never pass creds through it.
+- Live-proxy alternative to craco devServer: tiny node `http-proxy` server serving `build/` at `/mf/cfw/*` (prod build already has merged i18n) + CSP style nonce strip + drop `Secure` from set-cookie. No repo edits to revert.

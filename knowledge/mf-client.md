@@ -1,5 +1,14 @@
 # mf-client (netskope-ng-base/frontends/mf-client)
 
+## ENG-1356094 — Internet Security row must read `lseDeviceEvent.status`, not `status_v2` (2026-11-06)
+
+- L3 mapping: `client_status` == Internet Security status == Tunnel status; `client_status_v2` = IS + NPA aggregate.
+- Internet Security row: read `lse_event_status` (i.e. `lseDeviceEvent.status`), submit `client_status_v2`.
+- All Client Status row: read `lse_event_status_v2`, submit `client_status`.
+- Bug: `handleInternetSecurityStatus` originally read top-level `selectedDevice.last_event__status_v2` (aggregate) while the button label + status cell read service-level `lseDeviceEvent.status`. On OTP-disabled devices these diverge → button says "Enable" but handler submits `client_status_v2: 0`.
+- First-pass fix wrongly pivoted everything to `status_v2` — that's the IS+NPA aggregate, not pure IS. Correct fix: all three (status cell, button label, `isEnabled` payload) read `lseDeviceEvent.status`.
+- Test divergence case must set `last_seen_device_event.status='Disabled'` AND `last_seen_device_event.status_v2='Enabled'` (and top-level `last_event__status_v2='Enabled'`) to prove the handler ignores both aggregates.
+
 ## Run jest via `yarn test` (craco), never `npx jest` directly (2026-11-06)
 
 - Symptom: `npx jest <path>` fails with `SyntaxError: Unexpected token 'export'` from

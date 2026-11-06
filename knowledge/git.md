@@ -124,6 +124,7 @@
   line/call), or (b) a zsh array (`FILES=(a b c); git diff HEAD -- $FILES[@]`) or
   `${=FILES}` (forces word-split) if a variable is required. Applies to vanguard's
   local-pr-review.md phase and any other multi-file git command built from a joined string.
+- **Rebase conflict trap (2026-11-06, repeat offense):** `files=$(git diff --name-only --diff-filter=U); fix.py $files; git add -u && git rebase --continue` — zsh passed one joined arg, fix script crashed, but `git add -u` still staged the files WITH conflict markers and rebase committed them. Never chain `git add -u`/`--continue` after a resolve step without first asserting zero markers (`grep -cE '^(<<<<<<<|>>>>>>>)'`). Iterate unmerged files via `git diff --name-only --diff-filter=U > /tmp/u.txt; while read f; do ...; done < /tmp/u.txt`. Recovery if it already committed and next pick is mid-conflict: resolve pick → `git stash` → fix files → amend (or `git reset --soft HEAD^` if the bad commit is marker-only) → `git stash pop --index` → continue.
 - Same zsh flavor: `echo ===` fails with "== not found" — zsh does `=word` command-path expansion on args starting with `=`. Quote it: `echo "==="`.
 
 ## Sibling-repo git writes from a different cwd; stale integration base (2026-11-02)

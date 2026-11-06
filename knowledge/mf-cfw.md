@@ -155,3 +155,8 @@
 - `@netskope-ui/icons` is hand-declared in `src/react-app-env.d.ts`; a real export (e.g. `CheckmarkIcon`) still fails tsc TS2305 until added there.
 - Headless tenant login without leaking creds: standalone `playwright-core` script (from `@playwright/cli`'s node_modules) reads `.env`, fills `/auth/login`, saves `storageState` 0600 -> `playwright-cli -s=<s> state-load <file>`. playwright-cli fill/run-code echo the code (password) in output — never pass creds through it.
 - Live-proxy alternative to craco devServer: tiny node `http-proxy` server serving `build/` at `/mf/cfw/*` (prod build already has merged i18n) + CSP style nonce strip + drop `Secure` from set-cookie. No repo edits to revert.
+
+## ENG-1343810 typeahead live-validation traps (2026-11-06)
+- **Dropdown.Trigger asChild + InputV2: the `data-testid` lands on the container div, not the input.** `[data-testid="x-input"]` matches a `div.flex.flex-col` with `aria-expanded`; fill/click/value must target `[data-testid="x-input"] input`. `playwright-cli fill` on the container "succeeds" while typing nothing.
+- **Routing `roles/me` to 403 breaks the PAGE-level gates too** (`policy_simulator` also reads it → whole page bounces to `#/`). For a per-permission fallback test, route it 200 with a realistic apiGroups payload that omits just the one group (`network_location_profile`).
+- **Sessions expire mid-validation** (`logout?reason=session_expired` after reloads/idle) — the XHR `__reqs` hook dies with the page; re-login, re-hook, then submit. Poll-loop scripts that re-assert after every navigation step survive this better than one-shot chains.

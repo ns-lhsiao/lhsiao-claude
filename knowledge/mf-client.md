@@ -33,3 +33,9 @@
   updated to point at the new submodule SHA. Boot-feature flow: do the feature work in the
   submodule's own branch (`pr/ENG-XXX/...`), push, PR against mf-client's `master`. Parent
   submodule bump is a separate, later step (usually handled by release tooling).
+
+## tsc --noEmit baseline is ~300 pre-existing errors (2026-11-10)
+
+- `npx tsc --noEmit` on mf-client `master` reports ~300 errors (TS2345 x299, TS2589 x1) across 26 files — template-literal types vs `i18n.t(string)`, unrelated to your change. Don't try to fix them; the `lint` script's `tsc` step is dead weight locally, CI gates on its own config.
+- Correct use: run `npx tsc --noEmit` on BOTH the worktree and the primary checkout (same commit = same count), diff the counts. "No new errors" = same count, not zero. Verify your touched files contribute nothing via `npx tsc --noEmit 2>&1 | grep <your-file-names>` (empty = clean).
+- Coverage baseline for reference: `DevicesFilters.tsx` sits at ~95% stmts / 86% branches with UNCOVERED lines only in the JIT-provisioning `processQuery`/`processCacheQuery` memos and `handlerWhenQueryStartsOrStopsPending` (lines ~174/184/219-221) — pre-existing gaps, not yours to close when validating a filter-mapping change.

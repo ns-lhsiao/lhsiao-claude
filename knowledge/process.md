@@ -25,6 +25,10 @@
 - Fix: make the long-lived command itself the background task (`pnpm ... 2>&1` with `run_in_background: true`, no `&`). A background task's own process tree survives; a `&`-grandchild does not outlive its wrapper.
 - Related sandbox trap in the same run: sandboxed `curl http://localhost:<port>` returns `000` (connection refused-looking) even while the server listens — probe localhost with `dangerouslyDisableSandbox` before concluding the server died. `nc -z 127.0.0.1` also misses IPv6-wildcard listeners (`*:3000` on IPv6); `lsof -iTCP:<port> -sTCP:LISTEN` sees both.
 
+### Sandbox DNS blocks yarn install even with `allowed_domains` (2026-11-11)
+- `yarn install` in a Seatbelt-sandboxed Bash call failed with `YN0001: RequestError: getaddrinfo ENOTFOUND artifactory-rd.netskope.io` / `registry.npmjs.org` — DNS resolution itself blocked. Retrying with those hosts in `allowed_domains` did NOT fix it (still ENOTFOUND); rtk-filtered output also hid the host, so grep the full log for `ENOTFOUND` to identify targets.
+- Fix: run the install with `dangerouslyDisableSandbox: true` (permission gate covers it); then `node_modules/.bin/jest` etc. work normally and later commands can go back in the sandbox. Watch the "empty-node_modules exit-0 trap": the backgrounded install wrapper can report exit 0 while yarn said "Failed with errors" — verify `node_modules/.bin/<tool>` exists before running tests.
+
 ## Read Tool Strips/Converts HTML Markup
 
 - **The `Read` tool does not show raw bytes for `.html` files — it renders a converted, tag-stripped text view.** A `.html` file containing a real `<!DOCTYPE html>` + `<style>` block (dark-theme CSS vars, tables, etc.) came back from `Read` looking like plain Markdown (`# Heading`, bare bullet lists, no tags at all). This is misleading when the goal is to reuse an existing HTML file's markup verbatim as a template — `Read`'s view will NOT show you the actual tags to copy. Fix: use `Bash` (`cat`/`sed -n`) to view the real source when you need exact bytes to reuse; only trust `Read` for prose/content review, not markup extraction. Hit 2026-09-13 while trying to copy CLAUDE.md's referenced "stylish" HTML report template verbatim — `Read` made it look like the reference file was plain Markdown, contradicting CLAUDE.md's description of it as a dark-GitHub-themed HTML doc with CSS vars; a direct `sed`/`cat` would have shown the truth immediately instead of building a new template from the written spec alone.
@@ -291,3 +295,10 @@
 
 ## zsh `${(f)VAR}` trips the Bash rm-safety parser (2026-11-06)
 - `npx eslint ${(f)F}` was blocked as "could not be checked for dangerous rm operations" (no rm involved — parser can't read zsh flags). Write the list to a file and `xargs <cmd> < list.txt` instead. Bare `$F` doesn't word-split in zsh either.
+
+## Live QA tenant API probe recipe (2026-11-11, ENG-1400286)
+- Login contract reverse-engineering is a time sink — `/auth/login/local` only serves a static shell page; no simple curl login. Recipe: `~/.claude/tenants.json` (`lhsiao-qa01`: url/username/password) + playwright-cli: `playwright-cli -s=<slug> open "https://<host>/ns" --profile=$HOME/.playwright-cli-profile-netskope-sso` (needs `dangerouslyDisableSandbox`), fill the login form, then same-origin probe: `playwright-cli -s=<slug> eval "async () => { const r = await fetch('/api/v2/...', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...})}); return await r.json(); }" --raw`. Session cookie handled by the browser; no CSRF needed for v2 reads.
+- `playwright-cli` subcommand for setting input values is `fill <target-ref> <text>` (snapshot `ref=eNN`), NOT `type` — `type <text>` takes no target and errors "too many arguments" if given two.
+
+## yarn version file (mf-app-core) declined key format (2026-11-11)
+- Root workspace flagged "@netskope/mf-app-core@workspace:. has been modified but doesn't have a release strategy" whenever repo-root files (openspec/, .yarn/versions/) change even if no root code did. `declined:` entry must use the plain workspace NAME `"@netskope/mf-app-core"` — the `"@workspace:."` locator form throws `Workspace not found`.

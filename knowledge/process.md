@@ -302,3 +302,9 @@
 
 ## yarn version file (mf-app-core) declined key format (2026-11-11)
 - Root workspace flagged "@netskope/mf-app-core@workspace:. has been modified but doesn't have a release strategy" whenever repo-root files (openspec/, .yarn/versions/) change even if no root code did. `declined:` entry must use the plain workspace NAME `"@netskope/mf-app-core"` — the `"@workspace:."` locator form throws `Workspace not found`.
+
+## hub-gm install (2026-11-11)
+- `gm.py init` run from a fresh dir does NOT make cwd the hub: `find_root()` falls back to the skill repo root when no `.claude/hub-gm.json` exists up-tree, so init wrote config/state into `~/.claude/skills/hub-gm` itself. Fix: `HUB_GM_ROOT=<hub-dir> python3 .../gm.py init` forces the root. Clean the stray `state/` + `.claude/` out of the skill repo afterwards.
+- `test_gm.py` is author-machine-bound: 34 hardcoded `/Users/mitchw/` paths + role handbooks referencing skills only installed there (e.g. `ngbase-deploy`). ~21 failures/errors out of 920 on a fresh machine are expected, not an install problem.
+- `TIER_DEFAULT_RUNNER` hardcodes T5→`ccn` (settings-native.json); if native creds live in `~/.claude/settings.json` (Bedrock), set `"runner": "ccns"` on T5 in the shared tier file — popping the key is not enough, the default re-adds ccn.
+- herdr claude integration must be uninstalled before hub-gm runs (`herdr integration uninstall claude`); never run the herdr TUI without `HERDR_CONFIG_PATH` set or onboarding reinstalls it.

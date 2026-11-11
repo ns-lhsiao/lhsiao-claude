@@ -18,7 +18,7 @@
     "REQUESTS_CA_BUNDLE": "/Users/lhsiao/netskope-combined-ca-bundle.pem",
     "SSL_CERT_FILE": "/Users/lhsiao/netskope-combined-ca-bundle.pem"
   },
-  "model": "glm-5p3-flash[1m]",
+  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -38,16 +38,6 @@
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
             "timeout": 3,
             "async": true
-          }
-        ]
-      },
-      {
-        "matcher": "^(startup|resume|clear|compact|fork)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash '/Users/lhsiao/.claude/hooks/herdr-agent-state.sh' session",
-            "timeout": 10
           }
         ]
       }
@@ -94,6 +84,15 @@
             "statusMessage": "Converting to Markdown with markitdown..."
           }
         ]
+      },
+      {
+        "matcher": "Bash|AskUserQuestion|Agent|Task|Write|Edit|NotebookEdit|mcp__atlassian__.*|mcp__slack__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/lhsiao/.claude/skills/hub-gm/scripts/gm-guard.py"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -104,6 +103,14 @@
             "command": "/Users/lhsiao/.claude/hooks/claude-status-push.sh",
             "timeout": 3,
             "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/lhsiao/.claude/skills/hub-gm/scripts/gm-waiter-stop.py"
           }
         ]
       }
@@ -142,7 +149,8 @@
     "caveman@caveman": true,
     "cc-callbacks@shuttle": true,
     "eli5@claude-community": true,
-    "webui-insights@webui-claude-marketplace": true
+    "webui-insights@webui-claude-marketplace": true,
+    "postman@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "netskope": {

@@ -131,6 +131,10 @@ procedure) for PHP.
 
 Delegate to **`/boot-playwright <recipe> <slug>`** — do NOT hand-roll dev-env
 bootstrap or `playwright-cli` steps here; `boot-playwright` owns all of that.
+Validation is **headless by default**; the only `--headed` exception is the
+`webui2-angular-shell-devbox` recipe (QA tenant rejects the headless UA). If a
+stale headed session exists under the same slug, `playwright-cli -s=<slug> close`
+it first, then reopen headless.
 
 1. **Pick the recipe** from the files touched in Phase 4 (do not guess if mixed —
    ask):

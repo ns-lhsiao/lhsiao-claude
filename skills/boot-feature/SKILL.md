@@ -100,6 +100,11 @@ After implementation, validate the changed UI flow end-to-end. Delegate to
 Playwright scripts here; `boot-playwright` owns all shared session/login/nav
 mechanics and the four environment recipes.
 
+Validation is **headless by default**; the only `--headed` exception is the
+`webui2-angular-shell-devbox` recipe (QA tenant rejects the headless UA). If a
+stale headed session exists under the same slug, `playwright-cli -s=<slug> close`
+it first, then reopen headless.
+
 Pick `<recipe>` from the files this task touched:
 
 | Touched path | Recipe |

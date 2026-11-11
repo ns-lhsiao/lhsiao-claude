@@ -219,6 +219,15 @@ this is the one recipe where `../SKILL.md`'s headless default does NOT apply:
 playwright-cli -s=<slug> open --headed http://localhost:<webui2_port>/ns/#/login
 ```
 
+**Slug hygiene:** sessions opened here are `--headed` and persist after this
+conversation (the SKILL says never close mid-validation). Later recipes that
+`open` the same slug silently reuse the headed session and lose headless. When
+validation is done and a headed session is no longer needed, close it:
+
+```bash
+playwright-cli -s=<slug> close
+```
+
 Then follow `../SKILL.md`'s login flow as written. After login, navigate to any
 migrated page, e.g. `http://localhost:<webui2_port>/ns/#/settings/certificates`.
 

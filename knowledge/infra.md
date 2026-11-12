@@ -44,3 +44,8 @@
 ## pns_deploy.py verify does not zero-pad `--namespace 5` (2026-10-02)
 
 - `pns_deploy.py deploy --namespace 5` zero-pads internally (targets `qa01-mp-npe-rtp05--webui`), but `pns_deploy.py verify --namespace 5` does NOT — it looks up `qa01-mp-npe-rtp5--webui` and reports "namespace does not exist" while the deploy is fine. Pass the padded form to verify: `verify --namespace 05`.
+
+### qa01 crane tenants: NPE sidecar needs /ns rule, not just /mf/frame (2026-11-12)
+- Crane tenants (`/etc/nginx/crane_tenants.map`, e.g. cpcs-auth-3) route via `conf.d/aws_crane/*.conf`, NOT rtp configs. `/npe-ngssl-check` audit of `webui_proxy*.nginx.conf` misses them.
+- Frame entry document is `/ns` (`aws_crane/webui_route_mappings.conf` `location ~ ^/ns/?$`), which had no `$npe_env_prefix` handling → main frame index → all chunks main hashes → silently 200 via `@crane_mf_npe_fallback`. Test: `curl -H 'x-npe-env: npe-...' /ns` vs `/mf/frame/index.html`, compare `index-<hash>.js`.
+- `tsh ssh` hangs silently when the Teleport profile is expired — run `timeout 20 tsh status` first.

@@ -308,3 +308,7 @@
 - `test_gm.py` is author-machine-bound: 34 hardcoded `/Users/mitchw/` paths + role handbooks referencing skills only installed there (e.g. `ngbase-deploy`). ~21 failures/errors out of 920 on a fresh machine are expected, not an install problem.
 - `TIER_DEFAULT_RUNNER` hardcodes T5→`ccn` (settings-native.json); if native creds live in `~/.claude/settings.json` (Bedrock), set `"runner": "ccns"` on T5 in the shared tier file — popping the key is not enough, the default re-adds ccn.
 - herdr claude integration must be uninstalled before hub-gm runs (`herdr integration uninstall claude`); never run the herdr TUI without `HERDR_CONFIG_PATH` set or onboarding reinstalls it.
+
+### zsh `${var:+-H "$var"}` → malformed header → nginx 400 (2026-11-12)
+- zsh does not word-split, so `curl ${h:+-H "$h"}` passes ONE arg `-H x-npe-env: v`; curl sends header line with a leading space → nginx `400 Bad Request` (150 B). Looked like "intermittent 400" and was misattributed to nginx reloads.
+- Fix: build an array: `args=(); [ -n "$h" ] && args=(-H "$h"); curl "${args[@]}" ...`. Any surprising 400 in a header A/B loop → suspect the harness first.

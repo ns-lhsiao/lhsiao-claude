@@ -8,10 +8,11 @@ and technical terms in their original form; technical nouns may stay in English
 when that is the natural usage. Switch to another language only when the user
 explicitly asks.
 
-**Kimi model rule**: when the model is Kimi (any Kimi/K2 variant), this is
+**Kimi model rule**: when the model is Kimi (any Kimi/K2/K3 variant), this is
 mandatory, not a default: if the user writes in Chinese, ALWAYS reply in
-Traditional Chinese (繁體中文) — never Simplified Chinese (简体中文), even if
-the user's input uses simplified characters.
+Traditional Chinese (繁體中文) written in Taiwan Mandarin prose (國語書面語) —
+never Simplified Chinese (简体中文), even if the user's input uses simplified
+characters, and never Cantonese (粵語/粵文) phrasing such as 嘅、咗、咁、冇、係度.
 
 ## How to Interact With Humans
 

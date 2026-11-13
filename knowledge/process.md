@@ -312,3 +312,10 @@
 ### zsh `${var:+-H "$var"}` → malformed header → nginx 400 (2026-11-12)
 - zsh does not word-split, so `curl ${h:+-H "$h"}` passes ONE arg `-H x-npe-env: v`; curl sends header line with a leading space → nginx `400 Bad Request` (150 B). Looked like "intermittent 400" and was misattributed to nginx reloads.
 - Fix: build an array: `args=(); [ -n "$h" ] && args=(-H "$h"); curl "${args[@]}" ...`. Any surprising 400 in a header A/B loop → suspect the harness first.
+
+- hub-gm spawn `ValueError: role X ... unknown skill 'Y'` = stale skill ref in role handbook; NOT transient. Engine reads shared handbooks from `~/Repo/agentic/shared/roles/` (HUB_GM_SHARED_DIR default) — NOT `~/.claude/skills/hub-gm/roles/` (never read). Validate with gm.py's own `handbook_skills`+`skill_exists` (import gm.py with scripts/ on sys.path, cwd=hub ROOT). `pipeline start`/`reopen` write pipeline state BEFORE spawn, so a failed spawn leaves pipeline stuck: fix handbook, then `pipeline reopen <topic> --reason ...`. `feedback/INBOX.md` may not exist; create dir+file before appending.
+
+### ms-bootstrap tests: `.env.test` REACT_SHELL_SERVICE="localhost" (2026-11-13)
+- Not a valid URL → `new URL(AppConfig.REACT_SHELL_SERVICE)` throws in specs. `AppConfig` is `as const` (type-only), so override it in `beforeEach`/restore in `afterEach` with a real URL (`http://webui2.ngweb-v2`). No local node_modules in primary; `npx -y yarn@1.22.22 install --frozen-lockfile --ignore-scripts` in the worktree works (public + artifactory npm-dev). Repo pins node 18.17.1; 20 runs jest fine.
+### Regex bulk-replace in tests can hit the helper itself
+- Replacing `$_SERVER['X'] = …;` with `$this->helper(…)` also rewrote the helper's own body → infinite recursion. Exclude the helper or re-read it after any regex sweep.

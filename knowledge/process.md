@@ -337,3 +337,9 @@
 
 - **What failed**: both `/opt/netskope/shuttle/bin/nomad-code-search` (exit 127, not installed) and the skill fallback `scripts/explore.sh` (exit 127, "Configured agent is unavailable. Install it or check the command configuration", NOMAD_WORKER_INVOCATION ... zero tool calls) — Shuttle-managed worker not present on this machine/session.
 - **Correct**: don't burn retries on the skill; fall back to a normal Explore subagent (Agent tool) immediately.
+
+## Background subagent retry loop burned ~3.5h (2026-11-16)
+
+- **What happened**: background `triage` subagent (kimi-k3) ran 1389 turns / 1372 Bash but only 75 distinct commands; `git branch -r | grep release | sort -V | head -20` repeated 692x (output = cherry-pick branches, real releases cut by `head`). wb `loop-guard.py` (cap 8 per 600s) blocked 1096 calls, but blocked calls are not recorded, so the window drains and lets 8 more through every ~10 min: it throttles, never stops. Context hit ~705k, ~527M cache-read tokens. Tool time only ~15 min; rest was model turns.
+- **Misread to avoid**: cc-callbacks manifest shows 0 turns/tokens for every subagent (it does not record them), so "0 activity" does not mean stuck. Real data: `~/.claude/projects/<proj>/<session>/subagents/agent-<id>.jsonl` (parse with python, never cat/tail). cc-callbacks hooks are async/non-blocking and were not the cause.
+- **Correct**: bound background agents (turn/tool-call cap in prompt), check progress early, and treat `loop-guard BLOCKED` as stop-and-report. Rules added to `agents/triage.md` Operating Rules.

@@ -183,6 +183,8 @@ Regardless of outcome chosen in Phase 5, invoke `/learn` to harvest non-obvious 
 - **Cite file:line for every claim.** Every finding needs a source. "I think X" without a citation is a hypothesis, not a finding.
 - **Don't recommend from memory without verifying.** A learning that names a function or flag is a claim about *when the learning was written*. Before recommending a path, grep / read to confirm it still exists in the deployed branch.
 - **Stop when you have the answer.** If the first-pass diagnosis is short and well-evidenced, ship it. Don't pad with alternative framings to hedge.
+- **Never repeat an identical command.** If a command returns unhelpful output (truncated by `head`, wrong match set, empty), change the command (narrower grep, anchored pattern, no `head`) rather than re-running it. A `loop-guard ... BLOCKED` hook error means STOP: do not retry that call, change approach once, and if still blocked return a partial report with what is confirmed vs unverified. Hard cap: ~150 tool calls total; at the cap, stop and report partial findings.
+- **Release-branch listing**: `git branch -r | grep release | head` returns `cherry-pick/.../release-*` branches first and hides real ones. Anchor the pattern (e.g. `grep -E '/release-[0-9]'` excluding `cherry-pick`) and avoid `head`.
 
 ## What I Never Do
 

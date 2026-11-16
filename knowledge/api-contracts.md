@@ -67,3 +67,9 @@
 - Where Bug was found allowed options via `GET /rest/api/3/issue/createmeta/ENG/issuetypes/1` → `.fields[] | .allowedValues` (option values, e.g. Code Review `19278`).
 - Self-assign: `GET /rest/api/3/myself` → accountId `712020:f420f5c3-...` (Louis), pass as `"assignee": {"id": ...}`.
 - createmeta response shape: top-level `fields` array (no `.projects` wrapper) — jq `.values[]` fails; use `.fields[]`.
+
+## Jira ADF description via REST: two pitfalls (2026-11-16)
+
+- `content += helper(...)` where the helper returns a dict spreads it into `'type'`/`'attrs'`/`'content'` strings — Jira then 400s `INVALID_INPUT` with no detail. Helpers returning ADF nodes must be `append`ed (or return lists).
+- listItem content must be a block (`paragraph`), never a bare `text` node.
+- Bisecting a bad doc by PUT-ing prefixes: success returns **204 with empty body**, not 200 — compare against both.

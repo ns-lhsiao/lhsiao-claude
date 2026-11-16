@@ -240,6 +240,9 @@
   (3) system node v20 lacks `fs/promises.glob` (SyntaxError on import).
 - Working invocation, unsandboxed with the plugin's bundled tsx under Node 22:
   `~/.nvm/versions/node/v22.22.2/bin/node <plugin>/node_modules/tsx/dist/cli.mjs <script> ...`
+- General rule (2026-11-13): the UNSANDBOXED Bash shell has NO node/yarn at all (`command not found` —
+  nvm not sourced), while the sandboxed shell resolves them via the user profile. For
+  `dangerouslyDisableSandbox` builds, prefix: `export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 20`.
 - Also: the extractor does NOT price Fireworks-proxied models (GLM/Kimi → $0; 140/179 sessions in a
   GLM-heavy month), and does not capture subagent sidechains (only 3, $0). For subagent token data,
   scan `~/.claude/projects/*/subagents/agent-*.jsonl` directly.
@@ -323,3 +326,14 @@
 - Not a valid URL → `new URL(AppConfig.REACT_SHELL_SERVICE)` throws in specs. `AppConfig` is `as const` (type-only), so override it in `beforeEach`/restore in `afterEach` with a real URL (`http://webui2.ngweb-v2`). No local node_modules in primary; `npx -y yarn@1.22.22 install --frozen-lockfile --ignore-scripts` in the worktree works (public + artifactory npm-dev). Repo pins node 18.17.1; 20 runs jest fine.
 ### Regex bulk-replace in tests can hit the helper itself
 - Replacing `$_SERVER['X'] = …;` with `$this->helper(…)` also rewrote the helper's own body → infinite recursion. Exclude the helper or re-read it after any regex sweep.
+
+## hub-gm triage handoff: report instance name
+
+- **What failed**: hub-gm triage handoff doc (state/hub2/handoffs/hub-triage-N.md) says run `gm.py report triage --triage-file ...` — `report triage` fails with `hub-gm: no instance triage`.
+- **Correct**: use the pane's own instance name: `gm.py report hub-triage-N --triage-file ... --summary ...`. The generic template at the top of the handoff has it right; only the Task-section command is wrong.
+- Seen 2026-11-16, hub-triage-4.
+
+## nomad-code-search: worker unavailable, fall back to Explore agent (2026-11-16)
+
+- **What failed**: both `/opt/netskope/shuttle/bin/nomad-code-search` (exit 127, not installed) and the skill fallback `scripts/explore.sh` (exit 127, "Configured agent is unavailable. Install it or check the command configuration", NOMAD_WORKER_INVOCATION ... zero tool calls) — Shuttle-managed worker not present on this machine/session.
+- **Correct**: don't burn retries on the skill; fall back to a normal Explore subagent (Agent tool) immediately.

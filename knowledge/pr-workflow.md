@@ -86,3 +86,9 @@
 - mf-client's primary checkout has BOTH `lhsiao` (fork) and `origin`/`netskope` (netSkope/mf-client) remotes. I pushed to the fork and opened a cross-repo PR (#1351) out of habit — user corrected: use an in-repo branch. Verified push access to origin first, re-opened as #1355, closed the fork PR, deleted the fork branch.
 - **Repeated the exact same mistake hours later on ENG-1397736** (fork PR #1357, closed; re-opened in-repo as #1358). Habit persisted even with this entry present — make the check mechanical, not advisory: before ANY `git push` in mf-client (and any repo with multiple remotes), run `git remote -v` and push to the canonical `netSkope/*` remote, never `lhsiao`. Same for `gh pr create`: `--head <branch>` (no `owner:` prefix), not `--head ns-lhsiao:<branch>`.
 - Rule: when push access to the canonical repo exists, ALWAYS push the topic branch to `origin`/`netskope` and open an in-repo PR. The fork remote is a leftover, not the workflow. Fork path is only for the no-push-access case above.
+
+## Waiting on PR checks (2026-11-17)
+
+- In `gh pr view --json statusCheckRollup`, in-progress CheckRuns have `conclusion == ""` (empty string, not null). A wait loop keyed on `mergeable`/`mergeStateStatus` or on `== null` exits immediately (`BLOCKED` is normal while checks run). Use: `[.statusCheckRollup[]? | select(.conclusion == "" or .conclusion == "PENDING")] | length` until 0, in a `run_in_background` loop — foreground `sleep N; gh ...` is blocked by the harness.
+- `gh pr merge --auto --squash` exits 0 with no output and does NOT set `autoMergeRequest` when the repo/branch protection doesn't allow auto-merge; re-check with `--json autoMergeRequest`.
+- AI-review `publish` check failing with `{"published": false, "reason": "run already finished"}` / "End owned pending after infrastructure failure" is a review-bot infra race, not your code.

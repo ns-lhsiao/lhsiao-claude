@@ -182,7 +182,9 @@ crane 的 `/mf/frame` block 對**所有 tenant** 都生效，非 cutover 租戶�
 2. `x-npe-env` 符合 `NPE_ENV_HEADER_PATTERN`，跟 edge 用的 regex 相同。
 3. 原本的 shell 判斷已經決定要用 React。
 
-sidecar 的 URL 由 `REACT_SHELL_SERVICE` 推出來：把 host 第一段加上 `-<env>`，例如 `http://webui2.ngweb-v2` → `http://webui2-npe-pr-3893.ngweb-v2`。這對應 webui2 sidecar chart 的 `fullnameOverride: "webui2-{{ SUFFIX }}"`，跟 main 在同一個 namespace。server 是直接打 Service，所以 qa01 sidecar 雖然沒有 `/mf/frame` ingress（刻意關掉的），也不影響。
+sidecar 的 URL 由 `REACT_SHELL_SERVICE` 推出來：把 host 第一段加上 `-<env>`，例如 `http://webui2.ngweb-v2` → `http://webui2-npe-pr-3893.ngweb-v2`。這對應 webui2 sidecar chart 的 `fullnameOverride: "webui2-{{ SUFFIX }}"`，跟 main 在同一個 namespace。**（2026-11-16 更正，webui#19476 review）** 原本寫「server 直接打 Service，所以沒有 `/mf/frame` ingress 也不影響」是錯的：server 端只拿得到 HTML，瀏覽器接著要的 `/mf/frame/assets/<sidecar hash>.js` 仍走 edge → qa01 `webui2-mf-frame` ingress → **main** Service，sidecar hash 404（fallback 回 main 也 404）→ `/ns` 空白頁。live 實測（`--resolve` 一個名單外 host 走非 crane 路徑）：sidecar 的 `index-*.js`/`hostInit-*.js` 帶 header 與不帶 header 都是 404；帶 header 的 `/mf/frame/index.html` 在非 crane 路徑回的也是 main。**只有 crane 路徑（AWS ALB）帶 header 時 sidecar chunk 是 200**，所以 ms-bootstrap#433 不受影響，webui#19476 受影響。PHP 路徑要等 webui2 sidecar chart 渲染 `ingress.frame.pathPrefix: /mf/frame/<suffix>`（rewriteTarget `/mf/frame/$2`），而這被 `ngweb-actions` `sidecar_cleanup.yaml` 只按 name 刪 ingress 卡住。非 crane 路徑下 sidecar frame 資產**其實可由現有 `/mf/shell/<env>/mf/frame/assets/<hash>.js` 拿到**（實測帶/不帶 header 皆 200，edge fallback 讓 double-prefix 也通，與 review comment 說的「也 404」不同）；bundle 的 chunk import 是相對路徑，CSS deps/locales 用 `window.__CDN_URL__` 前綴，理論上 PHP 改寫 HTML 的 `/mf/frame/` 並設 `__CDN_URL__=/mf/shell/<env>` 可免 ingress，但**尚未用瀏覽器端到端驗證**。另：header regex 上限 67 字元，加 `webui2-` 後 label 超過 63 的 env ≥57 字元、尾 `-`、`_`、大寫都會變成不合法 DNS label 而靜默 fallback main。
+
+**（2026-11-17）修 PHP 路徑**：ngweb-actions#91（cleanup 依 label 刪 ingress）→ webui2#4282（MP sidecar template 開 `ingress.frame.pathPrefix: /mf/frame/{{ SUFFIX }}` + `rewriteTarget: /mf/frame/$2`）→ webui#19476 `f5e48e3a`（nonce 檢查 + RFC 1123 label 驗證）。要照這個順序 merge；ingress-nginx regex 路徑優先順序還沒在 qa01 live 驗證。注意：AWS leg template 本來就有 `/mf/frame/{{ SUFFIX }}`，缺的只有 MP leg。
 
 sidecar 回 200 而且有內容就用它；否則照原本的流程抓 main。只有 main 也失敗時才回 503。shell 判斷、nonce、metrics 都維持原樣。
 
@@ -262,6 +264,7 @@ curl -s -H 'x-npe-env: npe-pr-4071' "$H/mf/frame/build-info.json"               
 
 ## 13. 相關文件
 
+- [sidecar.md](sidecar.md)：sidecar 通則；特例 [sidecar-webui2.md](sidecar-webui2.md)（含 AWS leg）、[sidecar-webui.md](sidecar-webui.md)、[sidecar-ms-bootstrap.md](sidecar-ms-bootstrap.md)
 - [crane-frame-index-serving.md](crane-frame-index-serving.md)：`dist-frame/index.html` 從 build、pod nginx 到 PHP / ms-bootstrap / 瀏覽器的回傳路徑（含流程圖）
 - `all-html/eng-1419054-ns-npe-sidecar/crane-asset-routing-explainer.html`：crane asset routing 講解
 - `all-html/eng-1419054-ns-npe-sidecar/webui2-render-modes.html`：渲染模式總覽表

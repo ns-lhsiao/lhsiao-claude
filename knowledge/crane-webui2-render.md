@@ -264,7 +264,7 @@ curl -s -H 'x-npe-env: npe-pr-4071' "$H/mf/frame/build-info.json"               
 
 ## 13. 相關文件
 
-- [sidecar.md](sidecar.md)：sidecar 通則；特例 [sidecar-webui2.md](sidecar-webui2.md)（含 AWS leg）、[sidecar-webui.md](sidecar-webui.md)、[sidecar-ms-bootstrap.md](sidecar-ms-bootstrap.md)
+- [sidecar.md](sidecar.md)：sidecar general rules; cases [sidecar-webui2.md](sidecar-webui2.md) (incl. AWS leg)、[sidecar-webui.md](sidecar-webui.md)、[sidecar-ms-bootstrap.md](sidecar-ms-bootstrap.md)
 - [crane-frame-index-serving.md](crane-frame-index-serving.md)：`dist-frame/index.html` 從 build、pod nginx 到 PHP / ms-bootstrap / 瀏覽器的回傳路徑（含流程圖）
 - `all-html/eng-1419054-ns-npe-sidecar/crane-asset-routing-explainer.html`：crane asset routing 講解
 - `all-html/eng-1419054-ns-npe-sidecar/webui2-render-modes.html`：渲染模式總覽表

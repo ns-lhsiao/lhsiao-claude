@@ -1,50 +1,50 @@
-# Sidecar 特例：ms-bootstrap（crane `/ns` 產生者）
+# Sidecar Special Case: ms-bootstrap (crane `/ns` producer)
 
-最後更新：2026-11-17。通則：[sidecar.md](sidecar.md)。webui2 側：[sidecar-webui2.md](sidecar-webui2.md)。
+Last updated: 2026-11-17. General rules: [sidecar.md](sidecar.md). webui2 side: [sidecar-webui2.md](sidecar-webui2.md).
 
 ---
 
-## 1. 角色
+## 1. Role
 
-crane cutover 租戶（`/etc/nginx/crane_tenants.map`）的 `/ns` 不經 webui PHP：ngssl `$crane_webui_proxy_pass` → `aws_nlb` → ms-bootstrap `AppController.root()`。它**取代** `Ns.php`，不是接在 webui 後面。
+For crane cutover tenants (`/etc/nginx/crane_tenants.map`), `/ns` skips webui PHP: ngssl `$crane_webui_proxy_pass` → `aws_nlb` → ms-bootstrap `AppController.root()`. It **replaces** `Ns.php`; it does not sit behind webui.
 
-| 條件 | 結果 |
+| Condition | Result |
 |---|---|
-| `globals.ng_balkan_shell_enabled` 開（**不檢查登入狀態**，跟 Ns.php 不同） | `getReactShellHtml()` 抓 `${REACT_SHELL_SERVICE}/${REACT_SHELL_INDEX_PATH}`（`mf/frame/index.html`），換 nonce → React；失敗 503 |
-| flag 關 | `getAngularIndexScripts()` 抓 `${ANGULAR_UI_SERVICE}/ng/dist/prod-lazy/angular_view.txt` 套 `index` template → Angular |
+| `globals.ng_balkan_shell_enabled` on (**no login-state check**, unlike Ns.php) | `getReactShellHtml()` fetches `${REACT_SHELL_SERVICE}/${REACT_SHELL_INDEX_PATH}` (`mf/frame/index.html`), swaps nonce → React; failure → 503 |
+| flag off | `getAngularIndexScripts()` fetches `${ANGULAR_UI_SERVICE}/ng/dist/prod-lazy/angular_view.txt` into the `index` template → Angular |
 
-`/ns` 的 HTML 由 server 決定 → 跟 Ns.php 一樣是 `x-npe-env` 的例外（server 端 fetch 不帶 header）。
+The `/ns` HTML is decided server-side → like Ns.php, it's an `x-npe-env` exception (the server fetch doesn't carry the header).
 
-## 2. 修正（ms-bootstrap#433，ENG-1419882，2026-11-17 merged）
+## 2. Fix (ms-bootstrap#433, ENG-1419882, merged 2026-11-17)
 
-跟 webui#19476 同一套規則，只有 tenant 來源不同：
-1. `req.tenantUrl`（`tenant-info.middleware.ts` 從 core DB `uiHostname` 填）後綴比對 `NPE_SIDECAR_TENANT_DOMAINS`（`['qa.boomskope.com']`）。
-2. `x-npe-env` 符合 `NPE_ENV_HEADER_PATTERN`。
-3. 已決定走 React。
+Same rules as webui#19476; only the tenant source differs:
+1. `req.tenantUrl` (filled by `tenant-info.middleware.ts` from core DB `uiHostname`) suffix-matches `NPE_SIDECAR_TENANT_DOMAINS` (`['qa.boomskope.com']`).
+2. `x-npe-env` matches `NPE_ENV_HEADER_PATTERN`.
+3. React was already chosen.
 
-sidecar URL：`REACT_SHELL_SERVICE` host 第一段加 `-<env>`。200 且非空才用，否則 main。
+Sidecar URL: append `-<env>` to the first host label of `REACT_SHELL_SERVICE`. Used only on 200 with non-empty body, else main.
 
-**crane 路徑可以端到端**：瀏覽器後續 `/mf/frame/assets/<sidecar hash>.js` 經 `aws_nlb` → AWS ALB → **webui2 AWS leg** 的 `/mf/frame/<suffix>` rule → 200。前提是該 PR 的 **AWS leg 有部署**（webui2 `cicd-pr.yaml` 的 `publish_manifest_sidecar_aws`）；只有 MP leg 時 crane 租戶看不到 sidecar。
+**The crane path works end to end**: the browser's follow-up `/mf/frame/assets/<sidecar hash>.js` goes `aws_nlb` → AWS ALB → the **webui2 AWS leg**'s `/mf/frame/<suffix>` rule → 200. Prerequisite: the PR's **AWS leg is deployed** (webui2 `cicd-pr.yaml` `publish_manifest_sidecar_aws`); with only the MP leg, crane tenants won't see the sidecar.
 
-flag 關（Angular）時帶 header 仍是 Angular —— 這正是不用 nginx bypass 的理由。
+With the flag off (Angular), a request with the header still gets Angular — exactly why the nginx bypass was rejected.
 
-## 3. 為什麼不用 nginx 繞過（service#111366，open，**不 merge**）
+## 3. Why not the nginx bypass (service#111366, open, **do not merge**)
 
-#111366 讓 edge 對帶 header 的 crane `/ns` 直接拿 `/mf/frame/<env>/index.html`，跳過 ms-bootstrap：
-- nginx 讀不到 tenant DB 的 `ng_balkan_shell_enabled` → flag 關的租戶帶 header 會被強制變 React。
-- #433 的程式永遠跑不到；沒有 domain 限制。
-- 在 `/ns` location 宣告 `error_page` 會讓它**不再繼承** server 層的 `error_page`（maintenance、507、404），影響所有租戶。
+#111366 had the edge serve `/mf/frame/<env>/index.html` directly for crane `/ns` requests with the header, skipping ms-bootstrap:
+- nginx can't read the tenant DB's `ng_balkan_shell_enabled` → flag-off tenants with the header get forced into React.
+- #433's code would never run; no domain restriction.
+- Declaring `error_page` in the `/ns` location makes it **stop inheriting** server-level `error_page` (maintenance, 507, 404), affecting all tenants.
 
-## 4. qa01 ngssl 狀態備忘
+## 4. qa01 ngssl state notes
 
-- 2026-11-12 的 `/ns` hotfix 已還原；`aws_crane/webui_route_mappings.conf` = service `develop`。殘留備份 `.broken-20261112101409`、`.hotfix-v1-20261112103605` 可在 #433 live 驗證後清。
-- `aws_crane/upstream_map_definition.conf` 另有 ENG-1421154 reporting cutover 的 map（備份 `.erased-202611131357`），不是我們的。
-- 這台 VM（`ngsslwebui01`）服務**所有** qa01 租戶：先備份 → `sudo nginx -t -c /etc/nginx/nginx-sslwebui.conf`（要帶 `-c`）→ 協調後 `sudo supervisorctl signal HUP nginx`。`tsh ssh` profile 過期會無聲 hang，先 `timeout 20 tsh status`。
+- The 2026-11-12 `/ns` hotfix has been reverted; `aws_crane/webui_route_mappings.conf` = service `develop`. Leftover backups `.broken-20261112101409`, `.hotfix-v1-20261112103605` can be removed after #433 is verified live.
+- `aws_crane/upstream_map_definition.conf` also carries an ENG-1421154 reporting-cutover map (backup `.erased-202611131357`) — not ours.
+- This VM (`ngsslwebui01`) serves **all** qa01 tenants: back up first → `sudo nginx -t -c /etc/nginx/nginx-sslwebui.conf` (`-c` required) → coordinate, then `sudo supervisorctl signal HUP nginx`. `tsh ssh` hangs silently on an expired profile; run `timeout 20 tsh status` first.
 
-## 5. 開發坑
+## 5. Dev traps
 
-- `.env.test` 的 `REACT_SHELL_SERVICE="localhost"` 不是合法 URL；spec 要在 `beforeEach` 覆寫成真 URL、`afterEach` 還原。
-- flag cache 是 request-scoped（`TenantDbFactory` `Scope.REQUEST`，scope 往上傳染）→ 改 flag 不用重啟 pod。
-- 相關檔案：`src/app.controller.ts`、`src/common/npe-sidecar.ts`、`src/constants/general.constants.ts`、`src/.../tenant-info.middleware.ts`。
-- OpenSpec：`pr-deployment-exp/openspec/specs/ms-bootstrap-react-shell-npe-sidecar/`；`changes/ns-npe-sidecar-crane-routing/` 待 live 驗證後以 superseded archive。
-- **未確認**：ms-bootstrap 自己的 PR 能不能用 sidecar 測（`/ns` 不經 api-gateway，Kong host rewrite 不適用）。需要時先查它的 deploy 方式，不要假設。
+- `.env.test` has `REACT_SHELL_SERVICE="localhost"`, not a valid URL; specs must override it with a real URL in `beforeEach` and restore in `afterEach`.
+- The flag cache is request-scoped (`TenantDbFactory` `Scope.REQUEST`, scope propagates upward) → flag changes need no pod restart.
+- Files: `src/app.controller.ts`, `src/common/npe-sidecar.ts`, `src/constants/general.constants.ts`, `src/.../tenant-info.middleware.ts`.
+- OpenSpec: `pr-deployment-exp/openspec/specs/ms-bootstrap-react-shell-npe-sidecar/`; `changes/ns-npe-sidecar-crane-routing/` to be archived as superseded after live verification.
+- **Unverified**: whether ms-bootstrap's own PRs can be tested via a sidecar (`/ns` doesn't go through api-gateway, so the Kong host rewrite doesn't apply). Check its deploy model before assuming.

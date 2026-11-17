@@ -1,35 +1,35 @@
-# Crane / webui2 渲染與 x-npe-env sidecar 整理
+# Crane / webui2 Rendering and the x-npe-env Sidecar
 
-最後更新：2026-11-14。對應 ticket：ENG-1419054、ENG-1419882、ENG-1419883。
+Last updated: 2026-11-14. Tickets: ENG-1419054, ENG-1419882, ENG-1419883.
 
-本文整理 webui2 是怎麼被載入、渲染出來的，以及 PR sidecar（`x-npe-env`）在各條路徑上能不能生效、原因是什麼、修在哪裡。
-
----
-
-## 1. 一句話結論
-
-**決定跑哪個 webui2 build 的，是「第一個沒有 hash 的檔案」由誰提供。**
-
-之後所有檔名都帶 hash，這些 hash 在 build 時就已經寫死，只會指向同一份 build 的其他檔案。`x-npe-env` 只會改變「去哪裡拿檔案」（edge 把路徑 rewrite 到 sidecar），不會改變「要拿哪個檔名」。
+How webui2 gets loaded and rendered, and whether the PR sidecar (`x-npe-env`) takes effect on each path — why, and where it was fixed.
 
 ---
 
-## 2. 三個獨立的層次（不要混在一起看）
+## 1. One-line conclusion
 
-| 層次 | 問題 | 答案 |
+**Which webui2 build runs is decided by whoever serves the first unhashed file.**
+
+Every filename after that carries a hash baked in at build time, pointing only to other files of the same build. `x-npe-env` only changes *where* a file is fetched (the edge rewrites the path to the sidecar), never *which filename* is requested.
+
+---
+
+## 2. Three independent layers (don't mix them up)
+
+| Layer | Question | Answer |
 |---|---|---|
-| Hosting | 流量送去哪裡？ | ngssl 依 `$crane_tenant` 分流（`map $host` ← `/etc/nginx/crane_tenants.map`）。crane=1 → AWS NLB；crane=0 → qa01（PHP / ngweb_mf） |
-| HTML 產生者 | 誰產生 `/ns` 的 HTML？ | 非 cutover：webui PHP `Ns::index()`；crane cutover：ms-bootstrap `AppController.root()` |
-| Shell | 最後是誰在掌控頁面？ | Angular shell（webui neo）或 React shell（webui2 frame） |
+| Hosting | Where does the traffic go? | ngssl splits on `$crane_tenant` (`map $host` ← `/etc/nginx/crane_tenants.map`). crane=1 → AWS NLB; crane=0 → qa01 (PHP / ngweb_mf) |
+| HTML producer | Who generates the `/ns` HTML? | Non-cutover: webui PHP `Ns::index()`; crane cutover: ms-bootstrap `AppController.root()` |
+| Shell | Who ultimately controls the page? | Angular shell (webui neo) or React shell (webui2 frame) |
 
-- ms-bootstrap **不是接在 webui 後面**，它是 crane 租戶用來**取代** webui PHP、負責產生 `/ns` 的服務。
-- `/mf/frame` **不是 crane 專用**，它就是 webui2 獨立 React shell 的 build。crane config 會特別為它寫 location，只是因為 crane 租戶的 frame 由 AWS 提供。
+- ms-bootstrap does **not sit behind webui**; it is the service crane tenants use to **replace** webui PHP as the `/ns` producer.
+- `/mf/frame` is **not crane-only**; it is simply the build of webui2's standalone React shell. The crane config has dedicated locations for it only because crane tenants' frame is served from AWS.
 
 ---
 
-## 3. webui2 的兩份 build
+## 3. The two webui2 builds
 
-同一份原始碼 build 兩次（`webui2/Dockerfile`）：
+The same source is built twice (`webui2/Dockerfile`):
 
 ```dockerfile
 RUN PUBLIC_PATH_PREFIX=/mf/shell pnpm --filter shell build:cdn                       # → dist/
@@ -37,237 +37,237 @@ RUN PUBLIC_PATH_PREFIX=/mf/frame PROD_PATH_PREFIX=/mf/frame OUT_DIR=dist-frame \
     pnpm --filter shell build:cdn                                                    # → dist-frame/
 ```
 
-| build | URL 前綴 | 用途 | 備註 |
+| build | URL prefix | Purpose | Notes |
 |---|---|---|---|
-| `dist` | `/mf/shell/*` | Module Federation remote，給 Angular 嵌入 | image 裡刪掉了 `index.html`，Angular host 是唯一的入口（ENG-1000627） |
-| `dist-frame` | `/mf/frame/*` | 獨立 React shell，有自己的 `index.html` | ms-bootstrap / Ns.php 代理的就是這份 |
+| `dist` | `/mf/shell/*` | Module Federation remote, embedded by Angular | `index.html` is deleted from the image; the Angular host is the only entry (ENG-1000627) |
+| `dist-frame` | `/mf/frame/*` | Standalone React shell with its own `index.html` | What ms-bootstrap / Ns.php proxy |
 
-**一句話記法**：
-- `dist/index.html` 在 production 用不到，image 裡已經刪掉，只用 `remoteEntry.js` 和 assets。Angular 會把 `<balkan-shell>` 嵌進頁面，這是 **embedded** 模式：React 只渲染頁面內容，外框由 Angular 負責。
-- `dist-frame/index.html` 就是全頁 React shell 的入口：`main.tsx` → `setShellMode('standalone')`，TopBar、Sidebar、router、auth 都由 React 負責。`dist-frame/remoteEntry.js` 雖然存在，但沒人用。
-- 兩份是同一份原始碼，只有寫死的路徑前綴不同。standalone 和 embedded 是 runtime 依入口決定的模式，不是兩份不同的程式。
+**Mnemonic**:
+- `dist/index.html` is unused in production and deleted from the image; only `remoteEntry.js` and assets are used. Angular embeds `<balkan-shell>` into the page — **embedded** mode: React renders only page content, Angular owns the chrome.
+- `dist-frame/index.html` is the full-page React shell entry: `main.tsx` → `setShellMode('standalone')`; TopBar, Sidebar, router, auth are all React. `dist-frame/remoteEntry.js` exists but nobody uses it.
+- Both are the same source with only the baked-in path prefix differing. standalone vs embedded is a runtime mode chosen by the entry point, not two different programs.
 
 ---
 
-## 4. `/ns` HTML → JS 的載入鏈
+## 4. The `/ns` HTML → JS load chain
 
-### 4.1 每一層都寫死了下一層的檔名
+### 4.1 Each layer hardcodes the next layer's filename
 
 ```
-/ns                                   ← 檔名固定，沒有 hash
- └─ HTML 裡寫死：<script src="/mf/frame/assets/index-praQZ3lv.js">
-     └─ index-praQZ3lv.js 裡寫死：import "./route-bootstrap-5gvgmIXt.js"
-         └─ route-bootstrap-5gvgmIXt.js 裡寫死：import "./dashboard-D0vFlrRg.js" …
+/ns                                   ← fixed name, no hash
+ └─ HTML hardcodes: <script src="/mf/frame/assets/index-praQZ3lv.js">
+     └─ index-praQZ3lv.js hardcodes: import "./route-bootstrap-5gvgmIXt.js"
+         └─ route-bootstrap-5gvgmIXt.js hardcodes: import "./dashboard-D0vFlrRg.js" …
 ```
 
-main 和每個 PR sidecar 都是各自 build 的，hash 完全不同。main 的 `index-*.js` 只會去要 main 的 chunk，不可能去要 sidecar 的 chunk。
+main and each PR sidecar are built separately with completely different hashes. main's `index-*.js` only ever requests main's chunks, never the sidecar's.
 
-### 4.2 帶 hash 的 `<script>` 是怎麼產生的（webui2 原始碼）
+### 4.2 How the hashed `<script>` is produced (webui2 source)
 
-1. **原始碼只有入口**：`apps/shell/index.html:146` → `<script type="module" src="/src/main.tsx"></script>`
-2. **`vite build`** 從 `main.tsx` 開始打包整個 import graph，依每個 chunk 的內容算出 hash，再把 `src` 換成 `index-<hash>.js`。chunk 之間的 `import` 也是這時候寫進 JS 的。這是 Vite（rolldown）內建的行為，repo 裡沒有自己寫這段。
-3. **前綴**：
-   - `apps/shell/vite/env.ts:9-14,60`：`PROD_PATH_PREFIX` 只允許 `/mf/shell` 或 `/mf/frame`。
-   - `apps/shell/vite.config.ts:41`：`base: ${env.pathPrefix}/`。
-   - `vite.config.ts:49-61`：`renderBuiltUrl()` 把 HTML/CSS 的參照輸出成 `${prodPathPrefix}/${filename}`；JS 的動態 import 改成 runtime 運算式 `(window.__CDN_URL__||"")+"/mf/frame/…"`。
-4. **build 後處理**：`apps/shell/vite/plugins.ts:736-770` 的 `cdnPlaceholderPlugin` / `patchProductionHtml()`：
+1. **Source has only the entry**: `apps/shell/index.html:146` → `<script type="module" src="/src/main.tsx"></script>`
+2. **`vite build`** bundles the whole import graph from `main.tsx`, hashes each chunk by content, and replaces `src` with `index-<hash>.js`. Inter-chunk `import`s are written into the JS at this point. This is built-in Vite (rolldown) behavior; nothing custom in the repo.
+3. **Prefix**:
+   - `apps/shell/vite/env.ts:9-14,60`: `PROD_PATH_PREFIX` only allows `/mf/shell` or `/mf/frame`.
+   - `apps/shell/vite.config.ts:41`: `base: ${env.pathPrefix}/`.
+   - `vite.config.ts:49-61`: `renderBuiltUrl()` emits HTML/CSS references as `${prodPathPrefix}/${filename}`; JS dynamic imports become the runtime expression `(window.__CDN_URL__||"")+"/mf/frame/…"`.
+4. **Post-build processing**: `apps/shell/vite/plugins.ts:736-770` `cdnPlaceholderPlugin` / `patchProductionHtml()`:
    - `"/mf/frame/assets/…"` → `"{{CDN_URL}}/mf/frame/assets/…"`
-   - `<script type="module" crossorigin` → 補上 `nonce="{{NONCE}}"`
-   - Module Federation 的 `hostInit-<hash>.js` 也在這個階段注入。
-5. **serve 時 pod 端 nginx 換掉 placeholder**：`webui2/deploy/nginx/default.conf:33-35`
+   - `<script type="module" crossorigin` → adds `nonce="{{NONCE}}"`
+   - Module Federation's `hostInit-<hash>.js` is injected at this stage too.
+5. **Pod nginx replaces placeholders at serve time**: `webui2/deploy/nginx/default.conf:33-35`
    ```nginx
-   sub_filter '{{CDN_URL}}' '';            # 同源，換成空字串
+   sub_filter '{{CDN_URL}}' '';            # same origin → empty string
    sub_filter '{{NONCE}}'   '$request_id';
    ```
-6. PHP 或 ms-bootstrap 抓回這份 HTML 後，再把 nonce 換成 session 的 nonce，配合 CSP header。
+6. After PHP or ms-bootstrap fetch this HTML, they swap the nonce for the session nonce to match the CSP header.
 
-### 4.3 `x-npe-env` 改變的只有「去哪裡拿」
+### 4.3 `x-npe-env` only changes "where to fetch"
 
 ```
-瀏覽器要  /mf/frame/assets/route-bootstrap-5gvgmIXt.js
-edge 改成 /mf/frame/npe-pr-3893/assets/route-bootstrap-5gvgmIXt.js   ← 換地方拿，檔名不變
-sidecar 沒有這個 hash → 404 → @crane_mf_npe_fallback → main → 200
+browser requests /mf/frame/assets/route-bootstrap-5gvgmIXt.js
+edge rewrites to /mf/frame/npe-pr-3893/assets/route-bootstrap-5gvgmIXt.js   ← different location, same filename
+sidecar lacks this hash → 404 → @crane_mf_npe_fallback → main → 200
 ```
 
-拿個比喻來說：HTML 是印好的菜單，上面寫著 A 廚房的菜號；header 只是叫你改去 B 廚房點菜。B 廚房沒有 A 的菜號，就把你轉回 A 廚房。
+Analogy: the HTML is a printed menu listing kitchen A's dish numbers; the header only tells you to order from kitchen B. Kitchen B doesn't have A's dish numbers, so it sends you back to A.
 
 ---
 
-## 5. 兩種 HTML，差別在 hash 寫在哪裡
+## 5. Two kinds of HTML — the difference is where the hash lives
 
-| | React shell HTML（frame `index.html`） | Angular HTML（`neo_view` / ms-bootstrap Angular template） |
+| | React shell HTML (frame `index.html`) | Angular HTML (`neo_view` / ms-bootstrap Angular template) |
 |---|---|---|
-| HTML 裡有沒有 webui2 的 hash | **有**，直接寫死 `index-<hash>.js` | **沒有** |
-| webui2 的 hash 從哪來 | HTML 本身 | 瀏覽器執行到 Angular 時，才去抓 `${balkan_s3_cloudfront_url}/mf/shell/remoteEntry.js`（檔名固定、no-cache），hash 寫在這個檔案裡 |
-| 第一個沒有 hash 的檔案 | `/ns` | `/mf/shell/remoteEntry.js` |
-| 誰去拿這個檔案 | **server**（Ns.php / ms-bootstrap curl `webui2.ngweb-v2`） | **瀏覽器**（帶 header，經過 edge） |
-| 修正前 header 有沒有效 | ❌ | ✅（同源時） |
+| Does the HTML contain a webui2 hash? | **Yes**, hardcoded `index-<hash>.js` | **No** |
+| Where the webui2 hash comes from | The HTML itself | When Angular runs, the browser fetches `${balkan_s3_cloudfront_url}/mf/shell/remoteEntry.js` (fixed name, no-cache); the hash is inside that file |
+| First unhashed file | `/ns` | `/mf/shell/remoteEntry.js` |
+| Who fetches it | **server** (Ns.php / ms-bootstrap curl `webui2.ngweb-v2`) | **browser** (with header, through the edge) |
+| Header effective before the fix? | ❌ | ✅ (when same-origin) |
 
 ---
 
-## 6. `/ns` 的 shell 判斷
+## 6. `/ns` shell decision
 
-| 租戶 | 產生者 | 條件 | 結果 | 出處 |
+| Tenant | Producer | Condition | Result | Source |
 |---|---|---|---|---|
-| 非 cutover | webui PHP `Ns::index()` | `NG_BALKAN_SHELL_ENABLED` 且 `isLoginComplete()` 且 `ngBalkanShellEnabled()` | server 端 curl `http://webui2.ngweb-v2/mf/frame/index.html`，換 nonce → **React**；抓失敗回 503，不會退回 Angular（避免 reload 無限循環） | webui#19174（ENG-1356940，2026-11-03） |
-| 非 cutover | 同上 | 其他情況（還沒登入、MFA、TOS、flag 關） | `neo_view` → **Angular** | `Ns.php` |
-| crane | ms-bootstrap `root()` | `globals.ng_balkan_shell_enabled`（**不檢查登入狀態**） | 抓 `${REACT_SHELL_SERVICE}/mf/frame/index.html`，換 nonce → **React**；失敗回 503 | `app.controller.ts:42-53, getReactShellHtml()` |
-| crane | 同上 | flag 關 | 抓 `${ANGULAR_UI_SERVICE}/ng/dist/prod-lazy/angular_view.txt`，套進 `index` template → **Angular** | `getAngularIndexScripts()` |
+| Non-cutover | webui PHP `Ns::index()` | `NG_BALKAN_SHELL_ENABLED` && `isLoginComplete()` && `ngBalkanShellEnabled()` | Server-side curl `http://webui2.ngweb-v2/mf/frame/index.html`, swap nonce → **React**; failure → 503, no fallback to Angular (avoids an infinite reload loop) | webui#19174 (ENG-1356940, 2026-11-03) |
+| Non-cutover | same | Otherwise (not logged in, MFA, TOS, flag off) | `neo_view` → **Angular** | `Ns.php` |
+| crane | ms-bootstrap `root()` | `globals.ng_balkan_shell_enabled` (**no login-state check**) | Fetch `${REACT_SHELL_SERVICE}/mf/frame/index.html`, swap nonce → **React**; failure → 503 | `app.controller.ts:42-53, getReactShellHtml()` |
+| crane | same | flag off | Fetch `${ANGULAR_UI_SERVICE}/ng/dist/prod-lazy/angular_view.txt` into the `index` template → **Angular** | `getAngularIndexScripts()` |
 
-非 cutover 租戶登入後，Angular 的 `LoginService.loadPostAuthConfigs()` 看到 flag 開著，會 `history.replaceState('/ns#<target>')` 再 `location.reload()`，這次 PHP 就改回 React。這就是常說的「Angular shell → frame handoff」。
+After a non-cutover tenant logs in, Angular's `LoginService.loadPostAuthConfigs()` sees the flag on, does `history.replaceState('/ns#<target>')` then `location.reload()`, and this time PHP returns React. This is the "Angular shell → frame handoff".
 
 ---
 
-## 7. 四種主要組合與 sidecar 支援
+## 7. The four main combinations and sidecar support
 
-|  | HTML 產生者 = PHP | HTML 產生者 = ms-bootstrap |
+|  | HTML producer = PHP | HTML producer = ms-bootstrap |
 |---|---|---|
-| **shell = Angular** | ① 非 cutover，flag 關 → ✅ | ③ crane，flag 關 → ✅ |
-| **shell = React** | ② 非 cutover，flag 開 → 修正前 ❌，ENG-1419883 / webui#19476 | ④ crane，flag 開 → 修正前 ❌，ENG-1419882 / ms-bootstrap#433 |
+| **shell = Angular** | ① non-cutover, flag off → ✅ | ③ crane, flag off → ✅ |
+| **shell = React** | ② non-cutover, flag on → ❌ before fix, ENG-1419883 / webui#19476 | ④ crane, flag on → ❌ before fix, ENG-1419882 / ms-bootstrap#433 |
 
-- ① ③：瀏覽器自己去抓 `/mf/shell/remoteEntry.js`，請求帶著 header，經過 ngssl 的 generic block。⚠️ 如果 `balkan_s3_cloudfront_url` 是 CloudFront 網址，請求不經過 ngssl，sidecar 也會失效（qa01 的實際值還沒確認）。
-- ② ④：入口 hash 寫在 server 端 curl 回來的 HTML 裡，server 沒帶 header，所以固定拿到 main。
-- 直接打 `/mf/frame/<route>`：沒有經過 server 端代理，edge 的 `^/mf/(frame)` rewrite 會拿到 sidecar 的 `index.html`，兩種租戶都 ✅。
+- ① ③: the browser fetches `/mf/shell/remoteEntry.js` itself, with the header, through ngssl's generic block. ⚠️ If `balkan_s3_cloudfront_url` is a CloudFront URL, the request bypasses ngssl and the sidecar is ineffective (qa01's actual value not yet confirmed).
+- ② ④: the entry hash is in the HTML the server curls; the server doesn't send the header, so it always gets main.
+- Hitting `/mf/frame/<route>` directly: no server-side proxy; the edge `^/mf/(frame)` rewrite returns the sidecar's `index.html` — ✅ for both tenant types.
 
-### 情境 ② 走一次（以 `npe-pr-3893`、`/ns#/private-apps` 為例）
+### Walkthrough of case ② (`npe-pr-3893`, `/ns#/private-apps`)
 
-1. 登入前打 `/ns`：ngssl → `$webui_pass` → `Ns::index()`，`isLoginComplete()=false` → Angular 登入頁。
-2. 在 Angular 登入 → `reloadIntoBalkanShell()` → `replaceState('/ns#/private-apps')` + `reload()`。
-3. 再打 `/ns`：三個條件都成立 → `getBalkanShellHtml()` curl `webui2.ngweb-v2/mf/frame/index.html`。**沒帶 header、直接打 main 的 Service** → 拿到 main 的 HTML（`route-bootstrap-5gvgmIXt`）。**sidecar 在這一步失效。**
-4. 瀏覽器照 main 的 hash 抓 asset → edge rewrite 到 sidecar → 404 → fallback → main → 200。
-5. 頁面完全正常，但跑的是 main。
+1. `/ns` before login: ngssl → `$webui_pass` → `Ns::index()`, `isLoginComplete()=false` → Angular login page.
+2. Log in on Angular → `reloadIntoBalkanShell()` → `replaceState('/ns#/private-apps')` + `reload()`.
+3. `/ns` again: all three conditions hold → `getBalkanShellHtml()` curls `webui2.ngweb-v2/mf/frame/index.html`. **No header, straight to main's Service** → main's HTML (`route-bootstrap-5gvgmIXt`). **The sidecar is lost at this step.**
+4. The browser fetches assets by main's hashes → edge rewrites to sidecar → 404 → fallback → main → 200.
+5. The page is fully functional, but running main.
 
-對照：直接打 `/mf/frame/private-apps` 就會拿到 sidecar 的 `route-bootstrap-DvgR58Nj`。
+Contrast: hitting `/mf/frame/private-apps` directly gets the sidecar's `route-bootstrap-DvgR58Nj`.
 
 ---
 
-## 8. ngssl edge（qa01 `ngsslwebui01`）的分流
+## 8. ngssl edge routing (qa01 `ngsslwebui01`)
 
-### 8.1 crane 相關的 map（`aws_crane/upstream_map_definition.conf`）
+### 8.1 Crane maps (`aws_crane/upstream_map_definition.conf`)
 
-| 變數 | crane=1 | crane=0 | 用在 |
+| Variable | crane=1 | crane=0 | Used for |
 |---|---|---|---|
-| `$crane_webui_proxy_pass` | `http://aws_nlb` | `$webui_pass` | `/ns`、`/login`、`/ng/`、靜態檔 |
+| `$crane_webui_proxy_pass` | `http://aws_nlb` | `$webui_pass` | `/ns`, `/login`, `/ng/`, static files |
 | `$crane_mf_proxy_pass` | `http://aws_nlb` | `$ngweb_mf_pass` | `/mf/frame/*` |
 | `$crane_mf_host_header` | `$http_host` | `ngweb-fe` | `/mf/frame/*` |
-| `$mp_webui_proxy_pass` | api-gateway | `$webui_pass` | `/ns/.+`（post-auth API） |
+| `$mp_webui_proxy_pass` | api-gateway | `$webui_pass` | `/ns/.+` (post-auth API) |
 
-`x-npe-env` 先經過 `webui_proxy.nginx.conf` L187 的 map 驗證（`^npe-[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$`），格式不對就是空字串。
+`x-npe-env` is first validated by the map at `webui_proxy.nginx.conf` L187 (`^npe-[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$`); an invalid value becomes an empty string.
 
-### 8.2 location 比對順序（main server block）
+### 8.2 Location match order (main server block)
 
-| 順序 | 來源 | Location | npe rewrite | 404 fallback |
+| Order | Source | Location | npe rewrite | 404 fallback |
 |---|---|---|---|---|
-| L919 | `ngweb_mf_route_mappings.conf` | `~ ^/mf/(frame)/remoteEntry\.js$`、`build-info`、`~ ^/mf/(frame)(/\|$)` | ✅ | ✅ `@crane_mf_npe_fallback` |
-| L985 | `webui_proxy.nginx.conf` | `~ .*remoteEntry.js$`（shell 和其他 MF） | ✅ | ✅ `@mf_npe_fallback` |
+| L919 | `ngweb_mf_route_mappings.conf` | `~ ^/mf/(frame)/remoteEntry\.js$`, `build-info`, `~ ^/mf/(frame)(/\|$)` | ✅ | ✅ `@crane_mf_npe_fallback` |
+| L985 | `webui_proxy.nginx.conf` | `~ .*remoteEntry.js$` (shell and other MFs) | ✅ | ✅ `@mf_npe_fallback` |
 | L1062 | `webui_proxy.nginx.conf` | `~ ^/mf` | ✅ | ✅ |
-| L1208 | `webui_route_mappings.conf` L19 | `~ ^/ns/?$`（**入口 HTML**） | ❌ 不需要（改由產生者處理） | — |
+| L1208 | `webui_route_mappings.conf` L19 | `~ ^/ns/?$` (**entry HTML**) | ❌ not needed (handled by the producer) | — |
 
-crane 的 `/mf/frame` block 對**所有 tenant** 都生效，非 cutover 租戶也會進這個 block，只是 map 會把它導回 `ngweb_mf`。
+The crane `/mf/frame` block applies to **all tenants**; non-cutover tenants enter it too, the map just routes them back to `ngweb_mf`.
 
-### 8.3 pod 端（webui2 `deploy/nginx/default.conf`）
+### 8.3 Pod side (webui2 `deploy/nginx/default.conf`)
 
-- `^~ /mf/frame/` L178：把 `/mf/frame/npe-*/` 剝掉，用 `last` 重新比對 location。
-- `@frame_fallback`：路徑最後一段有副檔名就回真正的 404（讓 edge fallback）；沒有副檔名就回 SPA 的 `index.html`。
-- `^~ /mf/shell/`：同樣會剝掉 npe 段落。
+- `^~ /mf/frame/` L178: strips `/mf/frame/npe-*/` and re-matches with `last`.
+- `@frame_fallback`: if the last path segment has an extension → real 404 (lets the edge fall back); otherwise → SPA `index.html`.
+- `^~ /mf/shell/`: also strips the npe segment.
 
 ---
 
-## 9. 修正方案（已送 PR）
+## 9. Fix (PRs submitted)
 
-兩個 repo 用同一套規則，只有下面三個條件都成立時才先去抓 sidecar：
-1. tenant host 等於 `NPE_SIDECAR_TENANT_DOMAINS`（目前是 `['qa.boomskope.com']`）中的某一項，或以 `.<該項>` 結尾。用的是後綴比對、不分大小寫、會先去掉 port。之後要開放 stg，加一項 `'stg.boomskope.com'` 就好。
-   - webui 讀 `$_SERVER['HTTP_HOST']`（`NS_Loader` 用它查 tenant DB）。
-   - ms-bootstrap 讀 `req.tenantUrl`（`tenant-info.middleware.ts` 從 core DB 的 `uiHostname` 填入）。
-2. `x-npe-env` 符合 `NPE_ENV_HEADER_PATTERN`，跟 edge 用的 regex 相同。
-3. 原本的 shell 判斷已經決定要用 React。
+Both repos share one rule: try the sidecar first only when all three hold:
+1. The tenant host equals an entry in `NPE_SIDECAR_TENANT_DOMAINS` (currently `['qa.boomskope.com']`) or ends with `.<entry>`. Suffix match, case-insensitive, port stripped. To open stg later, add `'stg.boomskope.com'`.
+   - webui reads `$_SERVER['HTTP_HOST']` (`NS_Loader` uses it to look up the tenant DB).
+   - ms-bootstrap reads `req.tenantUrl` (filled by `tenant-info.middleware.ts` from core DB `uiHostname`).
+2. `x-npe-env` matches `NPE_ENV_HEADER_PATTERN`, the same regex as the edge.
+3. The existing shell decision already chose React.
 
-sidecar 的 URL 由 `REACT_SHELL_SERVICE` 推出來：把 host 第一段加上 `-<env>`，例如 `http://webui2.ngweb-v2` → `http://webui2-npe-pr-3893.ngweb-v2`。這對應 webui2 sidecar chart 的 `fullnameOverride: "webui2-{{ SUFFIX }}"`，跟 main 在同一個 namespace。**（2026-11-16 更正，webui#19476 review）** 原本寫「server 直接打 Service，所以沒有 `/mf/frame` ingress 也不影響」是錯的：server 端只拿得到 HTML，瀏覽器接著要的 `/mf/frame/assets/<sidecar hash>.js` 仍走 edge → qa01 `webui2-mf-frame` ingress → **main** Service，sidecar hash 404（fallback 回 main 也 404）→ `/ns` 空白頁。live 實測（`--resolve` 一個名單外 host 走非 crane 路徑）：sidecar 的 `index-*.js`/`hostInit-*.js` 帶 header 與不帶 header 都是 404；帶 header 的 `/mf/frame/index.html` 在非 crane 路徑回的也是 main。**只有 crane 路徑（AWS ALB）帶 header 時 sidecar chunk 是 200**，所以 ms-bootstrap#433 不受影響，webui#19476 受影響。PHP 路徑要等 webui2 sidecar chart 渲染 `ingress.frame.pathPrefix: /mf/frame/<suffix>`（rewriteTarget `/mf/frame/$2`），而這被 `ngweb-actions` `sidecar_cleanup.yaml` 只按 name 刪 ingress 卡住。非 crane 路徑下 sidecar frame 資產**其實可由現有 `/mf/shell/<env>/mf/frame/assets/<hash>.js` 拿到**（實測帶/不帶 header 皆 200，edge fallback 讓 double-prefix 也通，與 review comment 說的「也 404」不同）；bundle 的 chunk import 是相對路徑，CSS deps/locales 用 `window.__CDN_URL__` 前綴，理論上 PHP 改寫 HTML 的 `/mf/frame/` 並設 `__CDN_URL__=/mf/shell/<env>` 可免 ingress，但**尚未用瀏覽器端到端驗證**。另：header regex 上限 67 字元，加 `webui2-` 後 label 超過 63 的 env ≥57 字元、尾 `-`、`_`、大寫都會變成不合法 DNS label 而靜默 fallback main。
+The sidecar URL is derived from `REACT_SHELL_SERVICE`: append `-<env>` to the first host label, e.g. `http://webui2.ngweb-v2` → `http://webui2-npe-pr-3893.ngweb-v2`. This matches the webui2 sidecar chart's `fullnameOverride: "webui2-{{ SUFFIX }}"` in the same namespace as main. **(Corrected 2026-11-16, webui#19476 review)** The earlier claim "the server hits the Service directly, so the missing `/mf/frame` ingress doesn't matter" was wrong: the server only gets the HTML; the browser's follow-up `/mf/frame/assets/<sidecar hash>.js` still goes edge → qa01 `webui2-mf-frame` ingress → **main** Service, the sidecar hash 404s (fallback to main also 404s) → blank `/ns`. Live test (`--resolve` with an off-list host to force the non-crane path): the sidecar's `index-*.js`/`hostInit-*.js` 404 with and without the header; `/mf/frame/index.html` with the header on the non-crane path also returns main. **Only on the crane path (AWS ALB) with the header are sidecar chunks 200**, so ms-bootstrap#433 is unaffected and webui#19476 is affected. The PHP path needs the webui2 sidecar chart to render `ingress.frame.pathPrefix: /mf/frame/<suffix>` (rewriteTarget `/mf/frame/$2`), which was blocked by `ngweb-actions` `sidecar_cleanup.yaml` deleting ingresses only by name. On the non-crane path the sidecar frame assets **are actually reachable via the existing `/mf/shell/<env>/mf/frame/assets/<hash>.js`** (verified 200 with and without the header; edge fallback makes the double prefix work, contrary to the review comment's "also 404"); bundle chunk imports are relative and CSS deps/locales use the `window.__CDN_URL__` prefix, so in theory PHP could rewrite `/mf/frame/` in the HTML and set `__CDN_URL__=/mf/shell/<env>` to avoid the ingress, but this is **not browser-verified end to end**. Also: the header regex allows up to 67 chars; with `webui2-` prepended, env ≥57 chars (label > 63), a trailing `-`, `_`, or uppercase yields an invalid DNS label and silently falls back to main.
 
-**（2026-11-17）修 PHP 路徑**：ngweb-actions#91（cleanup 依 label 刪 ingress）→ webui2#4282（MP sidecar template 開 `ingress.frame.pathPrefix: /mf/frame/{{ SUFFIX }}` + `rewriteTarget: /mf/frame/$2`）→ webui#19476 `f5e48e3a`（nonce 檢查 + RFC 1123 label 驗證）。要照這個順序 merge；ingress-nginx regex 路徑優先順序還沒在 qa01 live 驗證。注意：AWS leg template 本來就有 `/mf/frame/{{ SUFFIX }}`，缺的只有 MP leg。
+**(2026-11-17) Fixing the PHP path**: ngweb-actions#91 (cleanup deletes ingresses by label) → webui2#4282 (MP sidecar template enables `ingress.frame.pathPrefix: /mf/frame/{{ SUFFIX }}` + `rewriteTarget: /mf/frame/$2`) → webui#19476 `f5e48e3a` (nonce check + RFC 1123 label validation). Merge in that order; ingress-nginx regex path precedence not yet verified live on qa01. Note: the AWS leg template already had `/mf/frame/{{ SUFFIX }}`; only the MP leg was missing it.
 
-sidecar 回 200 而且有內容就用它；否則照原本的流程抓 main。只有 main 也失敗時才回 503。shell 判斷、nonce、metrics 都維持原樣。
+If the sidecar returns 200 with content, use it; otherwise fetch main as before. 503 only when main also fails. Shell decision, nonce, and metrics unchanged.
 
-| Repo | PR | Ticket | 主要檔案 |
+| Repo | PR | Ticket | Main files |
 |---|---|---|---|
-| webui | netSkope/webui#19476 → `develop` | ENG-1419883 | `controllers/Ns.php`、`config/constants.php`、`tests/controllers_no_db/ns/nsTest.php` |
-| ms-bootstrap | netSkope/ms-bootstrap#433 → `main` | ENG-1419882 | `src/app.controller.ts`、`src/common/npe-sidecar.ts`、`src/constants/general.constants.ts` |
-| service | netSkope/service#111366（draft，**不 merge**，已被 #433 取代） | ENG-1419054 | `aws_crane/webui_route_mappings.conf`、`upstream_map_definition.conf` |
+| webui | netSkope/webui#19476 → `develop` | ENG-1419883 | `controllers/Ns.php`, `config/constants.php`, `tests/controllers_no_db/ns/nsTest.php` |
+| ms-bootstrap | netSkope/ms-bootstrap#433 → `main` | ENG-1419882 | `src/app.controller.ts`, `src/common/npe-sidecar.ts`, `src/constants/general.constants.ts` |
+| service | netSkope/service#111366 (draft, **do not merge**, superseded by #433) | ENG-1419054 | `aws_crane/webui_route_mappings.conf`, `upstream_map_definition.conf` |
 
-測試結果：webui PHPUnit `nsTest.php` 99/99、`controllers_no_db` 0 failure；ms-bootstrap jest 230/230，改動的檔案 coverage 100%。
+Test results: webui PHPUnit `nsTest.php` 99/99, `controllers_no_db` 0 failures; ms-bootstrap jest 230/230, 100% coverage on changed files.
 
-### 為什麼不用 nginx 繞過（#111366）
+### Why not the nginx bypass (#111366)
 
-#111366 在 edge 讓帶 header 的 crane `/ns` 直接去抓 `/mf/frame/<env>/index.html`，跳過 ms-bootstrap。問題有：
-- nginx 讀不到 tenant DB 裡的 `ng_balkan_shell_enabled`，所以 ③（flag 關）帶 header 時會**被強制切成 React**。
-- ms-bootstrap#433 的程式碼會永遠執行不到。
-- 沒有 domain 限制。
-- 如果在 `/ns` 裡宣告 `error_page`，該 location 會**不再繼承** server 層級的 `error_page`（maintenance 頁、507、404），影響所有租戶。所以拆分版才把 npe 邏輯移到 internal location `/__ns_npe_frame`。
-
----
-
-## 10. qa01 ngssl 目前狀態（2026-11-14）
-
-- hotfix **已被還原並生效**（不是我們做的，建議跟做 ENG-1421154 的人確認）：
-  - `aws_crane/webui_route_mappings.conf` 跟 service `develop` 版本相同（md5 `787b9ca0`），2026-11-12 13:59 改回。
-  - `aws_crane/upstream_map_definition.conf` 的 `$ns_frame_npe_env` map 已刪除。2026-11-13 14:07 另外加了 **ENG-1421154 reporting cutover** 的 map，改動前的備份是 `.erased-202611131357`。
-  - 實測：cpcs-auth-3 帶 `x-npe-env: npe-pr-4071` 打 `/ns`，回的是 main `index-praQZ3lv`；sidecar 是 `index-DjRXN8tB`。
-- 所以**在 ms-bootstrap#433 部署之前，crane 的 `/ns` 不會吃 sidecar**；直接打 `/mf/frame/<route>` 還是可以。
-- 殘留的備份檔：`webui_route_mappings.conf.broken-20261112101409`、`.hotfix-v1-20261112103605`，可以在 #433 驗證完後清掉。
-- 這台 VM 服務**所有** qa01 租戶。改動前一定要先備份，再跑 `sudo nginx -t -c /etc/nginx/nginx-sslwebui.conf`（要帶 `-c`），reload（`sudo supervisorctl signal HUP nginx`）前要先協調。
+#111366 had the edge fetch `/mf/frame/<env>/index.html` directly for crane `/ns` requests with the header, skipping ms-bootstrap. Problems:
+- nginx can't read the tenant DB's `ng_balkan_shell_enabled`, so ③ (flag off) with the header gets **forced into React**.
+- ms-bootstrap#433's code would never execute.
+- No domain restriction.
+- Declaring `error_page` in `/ns` makes that location **stop inheriting** server-level `error_page` (maintenance page, 507, 404), affecting all tenants. That's why the split version moved the npe logic into the internal location `/__ns_npe_frame`.
 
 ---
 
-## 11. 驗證方法
+## 10. qa01 ngssl current state (2026-11-14)
 
-### 在 DevTools 看「第一個沒有 hash 的檔案」
+- The hotfix **has been reverted and is live** (not by us; check with whoever did ENG-1421154):
+  - `aws_crane/webui_route_mappings.conf` matches service `develop` (md5 `787b9ca0`), reverted 2026-11-12 13:59.
+  - The `$ns_frame_npe_env` map in `aws_crane/upstream_map_definition.conf` is gone. On 2026-11-13 14:07 an **ENG-1421154 reporting cutover** map was added; pre-change backup is `.erased-202611131357`.
+  - Live test: cpcs-auth-3 with `x-npe-env: npe-pr-4071` on `/ns` returns main `index-praQZ3lv`; the sidecar is `index-DjRXN8tB`.
+- So **until ms-bootstrap#433 is deployed, crane `/ns` won't pick up the sidecar**; hitting `/mf/frame/<route>` directly still works.
+- Leftover backups: `webui_route_mappings.conf.broken-20261112101409`, `.hotfix-v1-20261112103605` — remove after #433 is verified.
+- This VM serves **all** qa01 tenants. Always back up first, then `sudo nginx -t -c /etc/nginx/nginx-sslwebui.conf` (`-c` required); coordinate before reloading (`sudo supervisorctl signal HUP nginx`).
 
-| 看到的 | 代表 |
+---
+
+## 11. Verification
+
+### Find "the first unhashed file" in DevTools
+
+| What you see | Meaning |
 |---|---|
-| `/ns` document response 裡有 `/mf/frame/assets/index-*.js` | React shell（②④）。hash 是 server 決定的 |
-| `/ns` 是 Angular，之後才載 `/mf/shell/remoteEntry.js` | Angular 嵌入（①③） |
-| `route-bootstrap-*.js` 的 URL 是 `/mf/shell/assets/…` | ①③ |
-| `route-bootstrap-*.js` 的 URL 是 `/mf/frame/assets/…` | ②④ |
-| `ns.globals.balkan_s3_cloudfront_url` 不是空值 | ① 走 CDN，sidecar 不會生效 |
+| `/ns` document response contains `/mf/frame/assets/index-*.js` | React shell (②④); hash decided by the server |
+| `/ns` is Angular, later loads `/mf/shell/remoteEntry.js` | Angular embedded (①③) |
+| `route-bootstrap-*.js` URL is `/mf/shell/assets/…` | ①③ |
+| `route-bootstrap-*.js` URL is `/mf/frame/assets/…` | ②④ |
+| `ns.globals.balkan_s3_cloudfront_url` is non-empty | ① goes through CDN; sidecar won't apply |
 
-第一個對了，後面全部都會對；第一個錯了，後面每個請求就算都帶了 header 也沒用。
+If the first one is right, everything after is right; if it's wrong, no amount of header on later requests helps.
 
 ### curl
 
 ```bash
 H=https://cpcs-auth-3.qa.boomskope.com
 curl -s "$H/ns" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1                               # main
-curl -s -H 'x-npe-env: npe-pr-4071' "$H/ns" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1   # 修正部署後應該不同
-curl -s -H 'x-npe-env: npe-pr-4071' "$H/mf/frame/index.html" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1  # sidecar 本身
+curl -s -H 'x-npe-env: npe-pr-4071' "$H/ns" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1   # should differ after the fix is deployed
+curl -s -H 'x-npe-env: npe-pr-4071' "$H/mf/frame/index.html" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1  # the sidecar itself
 curl -s -H 'x-npe-env: npe-pr-4071' "$H/mf/frame/build-info.json"                             # deploymentSuffix
 ```
 
-### 部署後的驗收清單
+### Post-deploy acceptance checklist
 
-- 非 cutover `*.qa.boomskope.com`、flag 開：`/ns` 帶 header → sidecar；不帶 → main；`npe-foo` → main。
-- crane `*.qa.boomskope.com`、flag 開：同上。
-- crane、flag 關、帶 header → 仍然是 Angular。
-- 非 qa 網域的租戶帶 header → 不受影響。
-
----
-
-## 12. 踩過的坑
-
-- **zsh 的 `curl ${h:+-H "$h"}`**：zsh 不做 word split，整串會變成一個參數，送出去的 header 開頭多了空格，nginx 回 `400 Bad Request`。這讓我們一度以為是 nginx 間歇性回 400。請用 array：`args=(-H "$h"); curl "${args[@]}"`。
-- **zsh `$R:apps/...`**：`:a` 會被當成 modifier。請寫成 `"${R}:apps/..."`。
-- **本機 checkout 過期**：本機 webui2 的 master 比 origin 落後 50 個 commit，導致第一版的 render-flow 報告有錯（embedded fixture、LD stage、pinger 的 method）。引用前先 `git fetch`，對照 `origin/master`。
-- **`/ns` 和 `/ns/.+` 不要搞混**：`/ns/.+` 是 post-auth API（`getStaticGlobals` 等），在那裡加 rewrite 會讓 API 壞掉。
-- **ms-bootstrap `.env.test`**：`REACT_SHELL_SERVICE="localhost"` 不是合法 URL，spec 裡要在 `beforeEach` 覆寫成真實 URL、在 `afterEach` 還原。
-- **ms-bootstrap 的 flag cache 是 request-scoped**：`TenantDbFactory` 是 `Scope.REQUEST`，scope 會往上傳染，所以改 flag 不需要重啟 pod。
+- Non-cutover `*.qa.boomskope.com`, flag on: `/ns` with header → sidecar; without → main; `npe-foo` → main.
+- crane `*.qa.boomskope.com`, flag on: same.
+- crane, flag off, with header → still Angular.
+- Tenants outside the qa domain with the header → unaffected.
 
 ---
 
-## 13. 相關文件
+## 12. Traps
 
-- [sidecar.md](sidecar.md)：sidecar general rules; cases [sidecar-webui2.md](sidecar-webui2.md) (incl. AWS leg)、[sidecar-webui.md](sidecar-webui.md)、[sidecar-ms-bootstrap.md](sidecar-ms-bootstrap.md)
-- [crane-frame-index-serving.md](crane-frame-index-serving.md)：`dist-frame/index.html` 從 build、pod nginx 到 PHP / ms-bootstrap / 瀏覽器的回傳路徑（含流程圖）
-- `all-html/eng-1419054-ns-npe-sidecar/crane-asset-routing-explainer.html`：crane asset routing 講解
-- `all-html/eng-1419054-ns-npe-sidecar/webui2-render-modes.html`：渲染模式總覽表
-- `all-html/eng-1419054-ns-npe-sidecar/ns-shell-npe-sidecar-webui-msb.html`：webui + ms-bootstrap 修正 report
-- `all-html/webui2-render-flow/webui2-render-flow.html`：完整的渲染流程（已對照 `origin/master` 修訂）
-- OpenSpec：webui `openspec/specs/balkan-shell-npe-sidecar/`；global `pr-deployment-exp/openspec/specs/ms-bootstrap-react-shell-npe-sidecar/`；`changes/ns-npe-sidecar-crane-routing/`（還沒 archive，等 #433 驗證後以 superseded archive）
+- **zsh `curl ${h:+-H "$h"}`**: zsh doesn't word-split, so the whole thing becomes one argument and the header goes out with a leading space; nginx returns `400 Bad Request`. This once made us think nginx was returning intermittent 400s. Use an array: `args=(-H "$h"); curl "${args[@]}"`.
+- **zsh `$R:apps/...`**: `:a` is parsed as a modifier. Write `"${R}:apps/..."`.
+- **Stale local checkout**: local webui2 master was 50 commits behind origin, which made the first render-flow report wrong (embedded fixture, LD stage, pinger method). `git fetch` and compare against `origin/master` before citing.
+- **Don't confuse `/ns` with `/ns/.+`**: `/ns/.+` is post-auth API (`getStaticGlobals` etc.); adding a rewrite there breaks the API.
+- **ms-bootstrap `.env.test`**: `REACT_SHELL_SERVICE="localhost"` isn't a valid URL; specs must override it with a real URL in `beforeEach` and restore in `afterEach`.
+- **ms-bootstrap flag cache is request-scoped**: `TenantDbFactory` is `Scope.REQUEST`, and scope propagates upward, so flag changes don't need a pod restart.
+
+---
+
+## 13. Related docs
+
+- [sidecar.md](sidecar.md): sidecar general rules; cases [sidecar-webui2.md](sidecar-webui2.md) (incl. AWS leg), [sidecar-webui.md](sidecar-webui.md), [sidecar-ms-bootstrap.md](sidecar-ms-bootstrap.md)
+- [crane-frame-index-serving.md](crane-frame-index-serving.md): the return path of `dist-frame/index.html` from build, pod nginx, through PHP / ms-bootstrap to the browser (with diagrams)
+- `all-html/eng-1419054-ns-npe-sidecar/crane-asset-routing-explainer.html`: crane asset routing explainer
+- `all-html/eng-1419054-ns-npe-sidecar/webui2-render-modes.html`: render modes overview table
+- `all-html/eng-1419054-ns-npe-sidecar/ns-shell-npe-sidecar-webui-msb.html`: webui + ms-bootstrap fix report
+- `all-html/webui2-render-flow/webui2-render-flow.html`: full render flow (revised against `origin/master`)
+- OpenSpec: webui `openspec/specs/balkan-shell-npe-sidecar/`; global `pr-deployment-exp/openspec/specs/ms-bootstrap-react-shell-npe-sidecar/`; `changes/ns-npe-sidecar-crane-routing/` (not yet archived; archive as superseded after #433 is verified)

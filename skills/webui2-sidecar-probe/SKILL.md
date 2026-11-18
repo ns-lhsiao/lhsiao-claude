@@ -41,7 +41,8 @@ echo the cookie value back in the report.
 | | NOT `Expires: 1981` / `X-XSS-Protection: 0` | ms-bootstrap `app.module.ts` copies PHP cache headers + helmet; both producers send them. |
 | Shell | `/ns` HTML has `/mf/frame/assets/index-*.js` → React frame; has `UI_Layer/dist` → Angular | First unhashed file decides the build (see knowledge `crane-webui2-render.md` §5). |
 | Sidecar /ns | `/ns`+hdr entry == sidecar `/mf/frame/index.html` entry ≠ main entry | Server-side curl must have forwarded the header. |
-| Asset owner | hdr 200 / no-hdr 404 → sidecar-only ✅; 200/200 → shared hash or main fallback ⚠️ (not proof); hdr ≠200 → broken | Edge falls back to main on 404, so only sidecar-only hashes prove the sidecar pod. |
+| Asset owner | hdr 200 / no-hdr 404 → sidecar-only ✅ (the only sidecar evidence); hdr ≠200 → broken ❌ | Edge falls back to main on 404. |
+| 200/200 split | name referenced by sidecar `/ns` HTML or sidecar entry chunk → **shared hash** (fine, but not sidecar evidence); not referenced → **likely main fallback** ⚠️ | Content-hash names: same name = same bytes, so byte compare can't separate shared from fallback (fallback also returns main bytes). A build never references a hash it didn't emit, so "sidecar build refs it" proves the sidecar has it. |
 | Leg skew | `/mf/frame/build-info.json` vs `/mf/shell/build-info.json` commit (both +hdr) | Crane `/mf/frame` → AWS leg (EKS); `/mf/shell` → MP leg (qa01). Different commits = one leg not redeployed. |
 
 ## Traps

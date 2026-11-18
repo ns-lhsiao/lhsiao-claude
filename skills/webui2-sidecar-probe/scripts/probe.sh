@@ -81,13 +81,18 @@ classify() { # $1 path
   local a b; a="$(code "${hdr[@]}" "$H$1")"; b="$(code "${base[@]}" "$H$1")"
   local v
   if [ "$a" = 200 ] && [ "$b" != 200 ]; then v="sidecar-only ✅"
-  elif [ "$a" = 200 ] && [ "$b" = 200 ]; then v="both (shared hash / fallback to main) ⚠️"
+  elif [ "$a" = 200 ] && [ "$b" = 200 ]; then
+    # Bytes identical either way (fallback also returns main bytes) -> only discriminator:
+    # does sidecar build reference this content-hash name? Build never references unemitted hash.
+    if grep -qF "${1##*/}" "$T/refs" 2>/dev/null; then v="shared hash (sidecar build refs it; not sidecar evidence)"
+    else v="NOT referenced by sidecar build -> likely main fallback ⚠️"; fi
   else v="BROKEN ❌"; fi
   printf '%-75s %s/%s %s\n' "$1" "$a" "$b" "$v"
 }
 if [ "$shell" = frame ]; then
-  for p in $(grep -oE '/mf/frame/assets/[A-Za-z0-9_.-]+\.(js|css)' "$T/s.html" | sort -u); do classify "$p"; done
   curl "${hdr[@]}" "$H$s_entry" > "$T/entry.js"
+  cat "$T/s.html" "$T/entry.js" > "$T/refs"   # sidecar build's own references
+  for p in $(grep -oE '/mf/frame/assets/[A-Za-z0-9_.-]+\.(js|css)' "$T/s.html" | sort -u); do classify "$p"; done
   for c in $(grep -oE '\./[A-Za-z0-9_.-]+-[A-Za-z0-9_]{8}\.(js|css)' "$T/entry.js" | sort -u | head -12); do
     classify "/mf/frame/assets/${c#./}"; done
 elif [ "$shell" = angular ]; then
@@ -97,6 +102,7 @@ elif [ "$shell" = angular ]; then
     say "=> auth_request masquerade (401->404 HTML) when anonymous. Pass cookie (ci_session=...) to verify shell chunks."
   else
   rs="$(grep -oE '[A-Za-z_]+-[A-Za-z0-9_]{8}\.js' "$T/re.s" | sort -u | head -3 | tr '\n' ' ')"
+  cp "$T/re.s" "$T/refs"
   rm_="$(grep -oE '[A-Za-z_]+-[A-Za-z0-9_]{8}\.js' "$T/re.m" | sort -u | head -3 | tr '\n' ' ')"
   say "remoteEntry.js +hdr chunks: $rs"; say "remoteEntry.js main chunks: $rm_"
   cmp -s "$T/re.s" "$T/re.m" && say "=> remoteEntry identical to main ❌/⚠️" || say "=> remoteEntry differs from main ✅"

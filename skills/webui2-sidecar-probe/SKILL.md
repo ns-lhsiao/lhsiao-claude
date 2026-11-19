@@ -37,9 +37,9 @@ echo the cookie value back in the report.
 | Question | Signal | Why |
 |---|---|---|
 | Producer | `Set-Cookie: ci_session=` present → PHP | CodeIgniter session; ms-bootstrap never sets it (verified by source grep). |
-| | else crane map snapshot `~/ns/git/webui-crane-project/qa01_crane_tenants.md` (override `CRANE_MAP=`) | Snapshot can be stale (lhsiao/mitchw were in snapshot yet PHP-served 2026-11-18). Live map: `ngsslwebui01:/etc/nginx/crane_tenants.map` (needs VPN DNS). |
+| | else crane map snapshot `~/ns/git/webui-crane-project/qa01_crane_tenants.md` (override `CRANE_MAP=`; if absent, producer degrades to `likely ms-bootstrap` from ci_session alone) | Snapshot can be stale (lhsiao/mitchw were in snapshot yet PHP-served 2026-11-18). Live map: `ngsslwebui01:/etc/nginx/crane_tenants.map` (needs VPN DNS). |
 | | NOT `Expires: 1981` / `X-XSS-Protection: 0` | ms-bootstrap `app.module.ts` copies PHP cache headers + helmet; both producers send them. |
-| Shell | `/ns` HTML has `/mf/frame/assets/index-*.js` → React frame; has `UI_Layer/dist` → Angular | First unhashed file decides the build (see knowledge `crane-webui2-render.md` §5). |
+| Shell | `/ns` HTML has `/mf/frame/assets/index-*.js` → React frame; has `UI_Layer/dist` → Angular | First unhashed file decides the build. |
 | Sidecar /ns | `/ns`+hdr entry == sidecar `/mf/frame/index.html` entry ≠ main entry | Server-side curl must have forwarded the header. |
 | Asset owner | hdr 200 / no-hdr 404 → sidecar-only ✅ (the only sidecar evidence); hdr ≠200 → broken ❌ | Edge falls back to main on 404. |
 | 200/200 split | name referenced by sidecar `/ns` HTML or sidecar entry chunk → **shared hash** (fine, but not sidecar evidence); not referenced → **likely main fallback** ⚠️ | Content-hash names: same name = same bytes, so byte compare can't separate shared from fallback (fallback also returns main bytes). A build never references a hash it didn't emit, so "sidecar build refs it" proves the sidecar has it. |
@@ -51,4 +51,3 @@ echo the cookie value back in the report.
 - `/ns/.+` is the post-auth API, not the entry — probe only `/ns`.
 - `balkan_s3_cloudfront_url` non-empty → browser bypasses ngssl, header useless for Angular-embedded.
 
-Background: `~/.claude/knowledge/crane-webui2-render.md`, `knowledge/sidecar-webui2.md`.

@@ -32,7 +32,7 @@ say ""
 
 # ---- 2. /ns producer
 say "## 2. /ns producer"
-crane="unknown (map snapshot missing)"
+crane="unknown (map snapshot missing at $CRANE_MAP; set CRANE_MAP=<path> — producer verdict falls back to ci_session only)"
 if [ -f "$CRANE_MAP" ]; then
   snap="$(grep -oE '抓取日 [0-9-]+|fetched [0-9-]+' "$CRANE_MAP" | head -1)"
   if grep -qF "${HOST#https://} 1;" "$CRANE_MAP"; then crane="YES ($snap snapshot)"; else crane="NO ($snap snapshot)"; fi

@@ -38,5 +38,9 @@ optional `recipe_extra()`. Write a matching `.md` with the expected shape.
 
 - K8s is ground truth: `helm list` misses YAP-deployed sidecars.
 - Image sha is the `pr/merge` commit, not PR head — compare date stamp in the tag and `build-info.branch`.
-- EKS kubeconfig goes through Rancher nonprod (`~/.kube/eks-skopeit-dev.yaml`); qa01 via `~/.kube/stork-qa01-mp-npe-iad0-nc1.yaml`. Both need VPN.
+- Kubeconfig per leg (both need VPN):
+  - `mp-qa01` (qa01 MP, stork) → `stork-qa01-mp-npe-iad0-nc1.yaml`; override `SDS_KC_MP_QA01=`.
+  - `aws-eks` (EKS `eks-skopeit-dev`, via Rancher nonprod) → `eks-skopeit-dev.yaml`; override `SDS_KC_EKS=`.
+  - Default lookup: `~/.kube/<file>` then `~/.nsk/<file>`.
+- `system:unauthenticated` / 403 = kubeconfig token expired, not "sidecar missing". Refresh kubeconfig (nsk / Rancher) and rerun.
 - EKS sidecars are not auto-cleaned when PR closes (ngweb-actions#88) — flag leftovers, don't delete.

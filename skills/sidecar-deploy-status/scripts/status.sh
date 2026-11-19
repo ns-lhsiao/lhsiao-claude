@@ -26,9 +26,15 @@ echo
 for leg in "${RECIPE_LEGS[@]}"; do
   IFS='|' read -r NAME KC INGS NOTE <<<"$leg"
   echo "## leg: $NAME  ($NOTE)"
-  [ -f "$KC" ] || { echo "kubeconfig missing: $KC"; echo; continue; }
+  [ -f "$KC" ] || { echo "kubeconfig missing: $KC (searched ~/.kube, ~/.nsk; override via recipe env, e.g. SDS_KC_*)"; echo; continue; }
+  echo "kubeconfig=$KC"
   if ! K get deploy "$RECIPE_RELEASE" -o name >/dev/null 2>"/tmp/sds.$$"; then
-    echo "deploy/$RECIPE_RELEASE: NOT FOUND ($(head -c 200 "/tmp/sds.$$"))"; echo; continue
+    if grep -qiE 'system:unauthenticated|Unauthorized|forbidden.*403|the server has asked for the client to provide credentials' "/tmp/sds.$$"; then
+      echo "AUTH FAILED — kubeconfig token likely expired; refresh it (e.g. re-download via nsk / Rancher) and retry ($(head -c 200 "/tmp/sds.$$"))"
+    else
+      echo "deploy/$RECIPE_RELEASE: NOT FOUND ($(head -c 200 "/tmp/sds.$$"))"
+    fi
+    echo; continue
   fi
   K get deploy "$RECIPE_RELEASE" -o jsonpath='{"ready="}{.status.readyReplicas}/{.spec.replicas}{" updated="}{.status.updatedReplicas}{" created="}{.metadata.creationTimestamp}{"\nimage="}{.spec.template.spec.containers[0].image}{"\n"}'
   echo "main image=$(K get deploy -l "$RECIPE_MAIN_SELECTOR" -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null)"

@@ -37,7 +37,7 @@ echo the cookie value back in the report.
 | Question | Signal | Why |
 |---|---|---|
 | Producer | `Set-Cookie: ci_session=` present → PHP | CodeIgniter session; ms-bootstrap never sets it (verified by source grep). |
-| | else crane map snapshot `~/ns/git/webui-crane-project/qa01_crane_tenants.md` (override `CRANE_MAP=`; if absent, producer degrades to `likely ms-bootstrap` from ci_session alone) | Snapshot can be stale (lhsiao/mitchw were in snapshot yet PHP-served 2026-11-18). Live map: `ngsslwebui01:/etc/nginx/crane_tenants.map` (needs VPN DNS). |
+| | else live `crane_tenants.map` on ngssl (`tsh ssh --cluster iad0 ngsslwebui01.qa01-mp-npe.nc1.iad0.nsscloud.net`, read-only grep) — **source of truth** | Needs VPN + valid `tsh` profile (`tsh login --proxy=teleport.netskope.io`). Override `NGSSL_HOST`/`NGSSL_CLUSTER`/`NGSSL_MAP`. Fallback only: local snapshot `CRANE_MAP=` (stale — lhsiao/mitchw were in snapshot yet PHP-served 2026-11-18); `CRANE_SOURCE=snapshot` skips live. Neither → producer from ci_session alone. |
 | | NOT `Expires: 1981` / `X-XSS-Protection: 0` | ms-bootstrap `app.module.ts` copies PHP cache headers + helmet; both producers send them. |
 | Shell | `/ns` HTML has `/mf/frame/assets/index-*.js` → React frame; has `UI_Layer/dist` → Angular | First unhashed file decides the build. |
 | Sidecar /ns | `/ns`+hdr entry == sidecar `/mf/frame/index.html` entry ≠ main entry | Server-side curl must have forwarded the header. |

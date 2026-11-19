@@ -8,7 +8,13 @@ HOST="${1:?usage: probe.sh <tenant-host> <npe-env> [cookie]}"
 ENV="${2:?usage: probe.sh <tenant-host> <npe-env> [cookie]}"
 COOKIE="${3:-}"
 H="https://${HOST#https://}"; H="${H%/}"
+# Crane membership source of truth = live ngssl map (read-only grep over tsh).
+# Fallback only: local snapshot CRANE_MAP. CRANE_SOURCE=snapshot skips live.
+NGSSL_HOST="${NGSSL_HOST:-ngsslwebui01.qa01-mp-npe.nc1.iad0.nsscloud.net}"
+NGSSL_CLUSTER="${NGSSL_CLUSTER:-iad0}"
+NGSSL_MAP="${NGSSL_MAP:-/etc/nginx/crane_tenants.map}"
 CRANE_MAP="${CRANE_MAP:-$HOME/ns/git/webui-crane-project/qa01_crane_tenants.md}"
+CRANE_SOURCE="${CRANE_SOURCE:-live}"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 
 base=(-s --max-time 20)
@@ -32,17 +38,33 @@ say ""
 
 # ---- 2. /ns producer
 say "## 2. /ns producer"
-crane="unknown (map snapshot missing at $CRANE_MAP; set CRANE_MAP=<path> — producer verdict falls back to ci_session only)"
-if [ -f "$CRANE_MAP" ]; then
-  snap="$(grep -oE '抓取日 [0-9-]+|fetched [0-9-]+' "$CRANE_MAP" | head -1)"
-  if grep -qF "${HOST#https://} 1;" "$CRANE_MAP"; then crane="YES ($snap snapshot)"; else crane="NO ($snap snapshot)"; fi
+crane="unknown"; why=""
+bare="${HOST#https://}"; bare="${bare%/}"
+if [ "$CRANE_SOURCE" = live ] && command -v tsh >/dev/null; then
+  # tsh hangs silently on expired profile -> check status first.
+  if timeout 20 tsh status >/dev/null 2>&1; then
+    out="$(timeout 30 tsh ssh --cluster "$NGSSL_CLUSTER" "$NGSSL_HOST" -- \
+      "test -r $NGSSL_MAP && { grep -cF '$bare 1;' $NGSSL_MAP || true; } || echo NOREAD" 2>/dev/null | tr -d '\r' | tail -1)"
+    case "$out" in
+      0) crane="NO (live $NGSSL_HOST:$NGSSL_MAP)";;
+      [1-9]*) crane="YES (live $NGSSL_HOST:$NGSSL_MAP)";;
+      *) why="live read failed (${out:-ssh error})";;
+    esac
+  else why="tsh profile expired: tsh login --proxy=teleport.netskope.io"; fi
+elif [ "$CRANE_SOURCE" = live ]; then why="tsh not installed"; fi
+if [ "$crane" = unknown ]; then
+  if [ -f "$CRANE_MAP" ]; then
+    snap="$(grep -oE '抓取日 [0-9-]+|fetched [0-9-]+' "$CRANE_MAP" | head -1)"
+    if grep -qF "$bare 1;" "$CRANE_MAP"; then crane="YES ($snap snapshot, may be stale; ${why:-live skipped})"
+    else crane="NO ($snap snapshot, may be stale; ${why:-live skipped})"; fi
+  else crane="unknown (${why:-live skipped}; no snapshot at $CRANE_MAP) — producer verdict from ci_session only"; fi
 fi
 ci="$(grep -i '^set-cookie: ci_session=' "$T/s.h" | head -1)"
-say "crane_tenants.map member : $crane  (snapshot may be stale; live map on ngsslwebui01 /etc/nginx/crane_tenants.map)"
+say "crane_tenants.map member : $crane"
 say "ci_session Set-Cookie    : $([ -n "$ci" ] && echo present || echo absent)  (CodeIgniter = PHP; ms-bootstrap never sets it)"
 # ms-bootstrap mimics PHP Expires/Cache-Control + helmet X-XSS-Protection:0 -> those are NOT discriminators.
 if [ -n "$ci" ]; then say "=> producer: webui PHP Ns::index() (MP qa01 webui pods)"
-  case "$crane" in YES*) say "   ⚠️ snapshot says crane but PHP answered: tenant likely removed from live map";; esac
+  case "$crane" in YES*) say "   ⚠️ map says crane but PHP answered: check map source / ngssl reload state";; esac
 else case "$crane" in
   YES*) say "=> producer: ms-bootstrap (crane: ngssl -> AWS NLB -> EKS eks-skopeit-dev)";;
   *)    say "=> producer: likely ms-bootstrap (no ci_session) — verify live map";;

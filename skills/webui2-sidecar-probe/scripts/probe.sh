@@ -13,7 +13,7 @@ H="https://${HOST#https://}"; H="${H%/}"
 NGSSL_HOST="${NGSSL_HOST:-ngsslwebui01.qa01-mp-npe.nc1.iad0.nsscloud.net}"
 NGSSL_CLUSTER="${NGSSL_CLUSTER:-iad0}"
 NGSSL_MAP="${NGSSL_MAP:-/etc/nginx/crane_tenants.map}"
-CRANE_MAP="${CRANE_MAP:-$HOME/ns/git/webui-crane-project/qa01_crane_tenants.md}"
+CRANE_MAP="${CRANE_MAP:-}"  # opt-in local snapshot, no default
 CRANE_SOURCE="${CRANE_SOURCE:-live}"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 
@@ -53,11 +53,11 @@ if [ "$CRANE_SOURCE" = live ] && command -v tsh >/dev/null; then
   else why="tsh profile expired: tsh login --proxy=teleport.netskope.io"; fi
 elif [ "$CRANE_SOURCE" = live ]; then why="tsh not installed"; fi
 if [ "$crane" = unknown ]; then
-  if [ -f "$CRANE_MAP" ]; then
+  if [ -n "$CRANE_MAP" ] && [ -f "$CRANE_MAP" ]; then
     snap="$(grep -oE '抓取日 [0-9-]+|fetched [0-9-]+' "$CRANE_MAP" | head -1)"
     if grep -qF "$bare 1;" "$CRANE_MAP"; then crane="YES ($snap snapshot, may be stale; ${why:-live skipped})"
     else crane="NO ($snap snapshot, may be stale; ${why:-live skipped})"; fi
-  else crane="unknown (${why:-live skipped}; no snapshot at $CRANE_MAP) — producer verdict from ci_session only"; fi
+  else crane="unknown (${why:-live skipped}; no CRANE_MAP snapshot) — producer verdict from ci_session only"; fi
 fi
 ci="$(grep -i '^set-cookie: ci_session=' "$T/s.h" | head -1)"
 say "crane_tenants.map member : $crane"

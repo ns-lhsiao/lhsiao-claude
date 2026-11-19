@@ -10,7 +10,14 @@ case "$SUFFIX" in npe-*) ;; *) SUFFIX="npe-$SUFFIX";; esac
 [ -f "$DIR/recipes/$RECIPE.sh" ] || { echo "no recipe: $DIR/recipes/$RECIPE.sh"; ls "$DIR/recipes"; exit 2; }
 # shellcheck source=/dev/null
 . "$DIR/recipes/$RECIPE.sh"
-K() { timeout 45 kubectl --kubeconfig "$KC" -n "$RECIPE_NAMESPACE" "$@"; }
+# Portable timeout: GNU timeout / gtimeout, else perl alarm (stock macOS has no timeout).
+to() { local s="$1"; shift
+  if command -v timeout >/dev/null; then timeout "$s" "$@"
+  elif command -v gtimeout >/dev/null; then gtimeout "$s" "$@"
+  else perl -e 'alarm shift; exec @ARGV or die "exec: $!"' "$s" "$@"; fi; }
+K() { to 45 kubectl --kubeconfig "$KC" -n "$RECIPE_NAMESPACE" "$@"; }
+ERR="$(mktemp)"; trap 'rm -f "$ERR"' EXIT
+for b in kubectl perl; do command -v "$b" >/dev/null || { echo "missing required tool: $b"; exit 2; }; done
 
 echo "# sidecar deploy status: recipe=$RECIPE release=$RECIPE_RELEASE ns=$RECIPE_NAMESPACE"
 HEAD=""
@@ -28,11 +35,11 @@ for leg in "${RECIPE_LEGS[@]}"; do
   echo "## leg: $NAME  ($NOTE)"
   [ -f "$KC" ] || { echo "kubeconfig missing: $KC (searched ~/.kube, ~/.nsk; override via recipe env, e.g. SDS_KC_*)"; echo; continue; }
   echo "kubeconfig=$KC"
-  if ! K get deploy "$RECIPE_RELEASE" -o name >/dev/null 2>"/tmp/sds.$$"; then
-    if grep -qiE 'system:unauthenticated|Unauthorized|forbidden.*403|the server has asked for the client to provide credentials' "/tmp/sds.$$"; then
-      echo "AUTH FAILED — kubeconfig token likely expired; refresh it (e.g. re-download via nsk / Rancher) and retry ($(head -c 200 "/tmp/sds.$$"))"
+  if ! K get deploy "$RECIPE_RELEASE" -o name >/dev/null 2>"$ERR"; then
+    if grep -qiE 'system:unauthenticated|Unauthorized|forbidden.*403|the server has asked for the client to provide credentials' "$ERR"; then
+      echo "AUTH FAILED — kubeconfig token likely expired; refresh it (e.g. re-download via nsk / Rancher) and retry ($(head -c 200 "$ERR"))"
     else
-      echo "deploy/$RECIPE_RELEASE: NOT FOUND ($(head -c 200 "/tmp/sds.$$"))"
+      echo "deploy/$RECIPE_RELEASE: NOT FOUND ($(head -c 200 "$ERR"))"
     fi
     echo; continue
   fi

@@ -8,6 +8,7 @@ HOST="${1:?usage: probe.sh <tenant-host> <npe-env> [cookie]}"
 ENV="${2:?usage: probe.sh <tenant-host> <npe-env> [cookie]}"
 COOKIE="${3:-}"
 H="https://${HOST#https://}"; H="${H%/}"
+printf '%s' "${H#https://}" | grep -qE '^[A-Za-z0-9.-]+$' || { echo "bad tenant host: $HOST (want plain hostname)"; exit 2; }
 # Crane membership source of truth = live ngssl map (read-only grep over tsh).
 # Fallback only: local snapshot CRANE_MAP. CRANE_SOURCE=snapshot skips live.
 NGSSL_HOST="${NGSSL_HOST:-ngsslwebui01.qa01-mp-npe.nc1.iad0.nsscloud.net}"
@@ -15,6 +16,11 @@ NGSSL_CLUSTER="${NGSSL_CLUSTER:-iad0}"
 NGSSL_MAP="${NGSSL_MAP:-/etc/nginx/crane_tenants.map}"
 CRANE_MAP="${CRANE_MAP:-}"  # opt-in local snapshot, no default
 CRANE_SOURCE="${CRANE_SOURCE:-live}"
+# Portable timeout: GNU timeout / gtimeout, else perl alarm (stock macOS has no timeout).
+to() { local s="$1"; shift
+  if command -v timeout >/dev/null; then timeout "$s" "$@"
+  elif command -v gtimeout >/dev/null; then gtimeout "$s" "$@"
+  else perl -e 'alarm shift; exec @ARGV or die "exec: $!"' "$s" "$@"; fi; }
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 
 base=(-s --max-time 20)
@@ -42,15 +48,15 @@ crane="unknown"; why=""
 bare="${HOST#https://}"; bare="${bare%/}"
 if [ "$CRANE_SOURCE" = live ] && command -v tsh >/dev/null; then
   # tsh hangs silently on expired profile -> check status first.
-  if timeout 20 tsh status >/dev/null 2>&1; then
-    out="$(timeout 30 tsh ssh --cluster "$NGSSL_CLUSTER" "$NGSSL_HOST" -- \
-      "test -r $NGSSL_MAP && { grep -cF '$bare 1;' $NGSSL_MAP || true; } || echo NOREAD" 2>/dev/null | tr -d '\r' | tail -1)"
+  if to 20 tsh status >/dev/null 2>&1; then
+    out="$(to 30 tsh ssh --cluster "$NGSSL_CLUSTER" "$NGSSL_HOST" -- \
+      "test -r $NGSSL_MAP && { grep -cF '$bare 1;' $NGSSL_MAP || true; } || echo NOREAD" 2>"$T/tsh.err" | tr -d '\r' | tail -1)"
     case "$out" in
       0) crane="NO (live $NGSSL_HOST:$NGSSL_MAP)";;
       [1-9]*) crane="YES (live $NGSSL_HOST:$NGSSL_MAP)";;
-      *) why="live read failed (${out:-ssh error})";;
+      *) why="live read failed: ${out:-$(tr -d '\033' < "$T/tsh.err" | sed 's/\[[0-9;]*m//g' | grep -v '^$' | head -1 | cut -c1-160)} (needs teleport role qa01-mp-npe + VPN)";;
     esac
-  else why="tsh profile expired: tsh login --proxy=teleport.netskope.io"; fi
+  else why="tsh not logged in / expired: tsh login --proxy=teleport.netskope.io"; fi
 elif [ "$CRANE_SOURCE" = live ]; then why="tsh not installed"; fi
 if [ "$crane" = unknown ]; then
   if [ -n "$CRANE_MAP" ] && [ -f "$CRANE_MAP" ]; then

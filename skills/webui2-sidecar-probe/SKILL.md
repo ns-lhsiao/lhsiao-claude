@@ -24,6 +24,11 @@ Angular login page and `/mf/shell/remoteEntry.js` is a 404 (auth_request
 masquerade), so post-login shell / Angular-embedded cases need a cookie. Never
 echo the cookie value back in the report.
 
+## Prerequisites
+
+- Tools: `bash`, `curl`, `perl` (timeout fallback on stock macOS). VPN on.
+- For the crane-map lookup: `tsh` logged in (`tsh login --proxy=teleport.netskope.io`) with teleport role `qa01-mp-npe` (ssh to `ngsslwebui01`, cluster `iad0`). Without it the probe still runs; producer attribution degrades to the `ci_session` signal and the output says why.
+
 ## Report to user (in this order)
 
 1. **戳了什麼** — the requests (`/ns` ±header, `/mf/frame/index.html`, assets, build-info).

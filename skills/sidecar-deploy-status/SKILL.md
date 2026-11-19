@@ -21,6 +21,12 @@ description: >-
 Recipes in `recipes/<name>.sh` (machine config) + `recipes/<name>.md` (why).
 Available: `webui2` (/mf/shell + /mf/frame, MP + AWS legs).
 
+## Prerequisites
+
+- Tools: `bash`, `kubectl`, `gh` (authed to netSkope), `perl` (timeout fallback on stock macOS; GNU `timeout`/`gtimeout` used if present).
+- VPN on. Two kubeconfigs with read access to `ngweb-v2`: `stork-qa01-mp-npe-iad0-nc1.yaml` (qa01 MP) and `eks-skopeit-dev.yaml` (EKS, Rancher nonprod), in `~/.kube/` or `~/.nsk/`, or point `SDS_KC_MP_QA01` / `SDS_KC_EKS` at them.
+- A missing leg kubeconfig only skips that leg; the other still reports.
+
 ## Report to user
 
 Per leg: deployed? ready? image tag (date + merge sha) and whether legs match

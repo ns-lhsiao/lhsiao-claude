@@ -146,7 +146,7 @@
   },
   "enabledPlugins": {
     "wb@webui-balkan-claude-plugin": true,
-    "caveman@caveman": true,
+    "caveman@caveman": false,
     "cc-callbacks@shuttle": true,
     "eli5@claude-community": true,
     "webui-insights@webui-claude-marketplace": true,

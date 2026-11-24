@@ -379,3 +379,7 @@
 - **Correct**: hook `command` strings always use the absolute node path (`"$HOME/.nvm/versions/node/<ver>/bin/node"`), as `~/.claude/settings.json` already did. Check the whole chain: plugin hooks are easy to miss — `grep -rn UserPromptSubmit ~/.claude/plugins/cache` finds them in `.claude-plugin/plugin.json`, not `hooks/hooks.json`.
 - **Fix applied**: the plugin's SessionStart + UserPromptSubmit hooks were diff-identical duplicates of the settings.json ones, so the plugin was disabled (`"caveman@caveman": false` in `enabledPlugins`); `/caveman*` skills still resolve from `~/.agents/skills`. Takes effect on next session start.
 - **Rule**: before blaming the harness, compare what the failing hook runs against what the working hook runs — a duplicate pair with one bare `node` and one absolute path pins the cause in one diff. `enabledPlugins` is read at startup, so a plugin change needs a restart.
+
+## rtk swallows `go test -v` output, so subtest greps come back empty (2026-11-24, ENG-1259899)
+- `go test ... -run X -v | grep 'PASS:'` printed nothing while the run itself passed: the rtk hook rewrites `go test` and collapses the output to a summary line (`Go test: 44 passed in 1 packages`), so anything piped or grepped downstream sees no per-test lines.
+- Correct: redirect the raw run to a file first (`go test ... -v > /tmp/x.log 2>&1`), then grep the file — the file holds the unfiltered output. Same applies to `go build`/`go vet` summaries.

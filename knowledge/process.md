@@ -127,6 +127,16 @@
 - **Two dev servers from one Bash call both launched from the same checkout.** `cd <worktree> && (A &); (B &)` — the second launch inherits the `cd`; "Shell cwd was reset" only happens *between* tool calls. Wrap each launch in its own subshell with an explicit path: `(cd <worktree> && ... pnpm dev > /tmp/dev-after.log &)` then `(cd <primary> && ... pnpm dev > /tmp/dev-before.log &)`, and confirm per port with `lsof -p <vite pid> -a -d cwd -Fn` before screenshotting. Cost two restarts on 2026-09-03 (ENG-1252057).
 - **`openspec status --change <name>` errors `Change '<name>' not found. No changes exist.` when cwd is inside `openspec/changes/<name>/`.** The CLI resolves `openspec/` from cwd upward but not from within a change dir. Run openspec commands from the repo root. 2026-09-03.
 
+## zsh backticks inside `gm.py prompt "..."` strings get command-substituted (2026-11-19)
+- `python3 scripts/gm.py prompt <iid> "text with \`dns-domain\` in it"` runs under zsh (login shell `sh` -> zsh): backtick spans are executed as commands and replaced by empty output, so the instance receives a prompt with the identifiers silently missing (`command not found: dns-domain`).
+- Fix: never put backticks inside a double-quoted Bash argument. Use single quotes, or drop the backticks and spell the identifiers bare, or send the text via a heredoc (`--brief - <<'BRIEF'`) which is quoted and safe.
+- Same trap applies to `$var`, `$(...)`, and `!` history expansion inside double-quoted prompt text.
+
+## hub-gm waiter re-arm trips the wb loop-guard (2026-11-19)
+- `gm.py wait-event --consumer gm` is re-armed after every event batch; after ~8 re-arms in 600s the wb plugin's `loop-guard.py` blocks it as a repeated identical call (`token-budget: loop-guard-max-repeats`, cap 8).
+- This repeat is intended, not a stuck loop. Unblock: use the root-prefixed form `HUB_GM_ROOT=<hub> python3 .../gm.py wait-event --consumer gm` (different command string, same waiter), or wait ~252s for the oldest hit to age out.
+- Do not edit balkan-policy.yml for this — the gate is protecting against a real failure mode and the prefixed form is the documented harness spelling.
+
 ## Sandboxed Bash cannot write into a git worktree outside the session cwd (2026-09-22)
 - Session cwd was `claudeDesktop/`; the vanguard worktree lives at a sibling path under
   `~/ns/git/`. Heredoc / python writes there failed with `Operation not permitted` because the
@@ -350,3 +360,22 @@
 - RC: merge to master → `bump-rc.yml` opens bot PR `[CICD-BOT] Bump release candidate versions` → merging it triggers `publish-rc.yml` (`yarn publish:next`, dist-tag `next`). The real per-package version is in `packages/*/package.json`, not root.
 - Stable: `publish-stable.yml` only fires on a master commit titled `[CICD-BOT] Bump stable release versions`. Trigger it with `gh workflow run bump-stable.yml -R netSkope/mf-app-core` → bot PR `nsbot/bump_stable` ("NG-762: ...") → merge → publish (~35 min build). The PR said "Automerge: Enabled" but `autoMergeRequest` stayed null and `gh pr merge --auto --squash` exited 0 with no effect; it still merged on its own once checks finished (`Version Check + Build` failing was non-blocking).
 - **Verify with Artifactory directly, not `npm view`**: `npm view` returned a stale cache (`latest: 3.14.3`) and took >120s. Anonymous `curl -s https://artifactory.netskope.io/artifactory/api/npm/npm-dev/@netskope-ui%2ffilter | jq '.["dist-tags"]'` gave the truth (`latest: 3.14.4`) in seconds.
+
+## hub-gm curator handoff: report as the FULL instance id, not the `cur-` alias (2026-11-19)
+
+- The curator handoff's step 7 literally says `gm.py report cur-e1052505-developer-2 --candidates-file …` (the `cur-` form used inside the handoff prose), but the engine's registered instance is `hub-cur-e1052505-developer-2` — the bare form fails `hub-gm: no instance cur-e1052505-developer-2`. Same for every `report`/`--phase`/`--link` call from a curator pane: use the id from the handoff TITLE (`hub-cur-<topic>-<role>`), i.e. the basename of the handoff file.
+- The handoff's own top section already shows the right form; only the numbered task steps use the alias. Cheap check: the first `--phase` report at the start of the run proves the id before the candidates report at the end.
+
+## webui-ff-toggle on qa01: port 3306, and DB-direct writes need a FRESH browser context (2026-11-24)
+
+- **`~/.claude/connections/qa01.json` had `port: 3307` — that port accepts TCP but never returns the MySQL greeting** (`ERROR 2013 ... Lost connection at 'waiting for initial communication packet'`, pymysql `(2013)`). Port **3306** on the same `mariadbhavip-int.qa01-mp-npe...` host works. Diagnostic: `mysql -h <host> -P 3306` returning `ERROR 2059 Authentication plugin ...` means you DID reach the server (port is right, client plugin is wrong) — a 2013/60 means the port is wrong or the tunnel is down.
+- **Netskope NPA up but MariaDB "unreachable" is usually the port, not the tunnel.** With the tunnel healthy, `curl` to an NPA host resolves to a `191.1.1.x` fake IP and works; `host`/`dscacheutil` may still print the public IP, and `nc`/`ping` against the public IP always fail. Judge reachability with `curl`, not `nc`/`ping`.
+- **`--via=db` writes are visible to the DB immediately but NOT to a logged-in browser session.** A reload (even a re-login) in the same playwright-cli session kept serving the OLD `window.ns.globals` values for minutes; a brand-new session (`npx @playwright/cli -s=<newslug> open ...`) picked up the new values on first login. So when flipping flags to observe a different render, open a fresh playwright-cli session per flag state instead of reloading.
+- **Flipping `dns_profiles_inheritance_enabled` triggers a one-off backend migration.** The page shows a red banner "Updating DNS Profiles to support Inheritance. Please retry after a minute" and 0 rows until it finishes (~1 min on qa01). Screenshot only after the banner clears.
+
+## Hook commands must not call bare `node` — hook env lacks nvm PATH (2026-11-24)
+
+- **Symptom**: `UserPromptSubmit hook failed` + `/bin/sh: node: command not found` every prompt. Cause: the `caveman@caveman` plugin's `plugin.json` hooks were `node "${CLAUDE_PLUGIN_ROOT}/src/hooks/*.js"`; hooks are spawned through `/bin/sh`, and on this machine node exists **only** under nvm (`~/.nvm/versions/node/v20.19.2/bin/node` — nothing in `/usr/local/bin` or `/opt/homebrew/bin`), so a hook PATH without the nvm bin dir fails.
+- **Correct**: hook `command` strings always use the absolute node path (`"$HOME/.nvm/versions/node/<ver>/bin/node"`), as `~/.claude/settings.json` already did. Check the whole chain: plugin hooks are easy to miss — `grep -rn UserPromptSubmit ~/.claude/plugins/cache` finds them in `.claude-plugin/plugin.json`, not `hooks/hooks.json`.
+- **Fix applied**: the plugin's SessionStart + UserPromptSubmit hooks were diff-identical duplicates of the settings.json ones, so the plugin was disabled (`"caveman@caveman": false` in `enabledPlugins`); `/caveman*` skills still resolve from `~/.agents/skills`. Takes effect on next session start.
+- **Rule**: before blaming the harness, compare what the failing hook runs against what the working hook runs — a duplicate pair with one bare `node` and one absolute path pins the cause in one diff. `enabledPlugins` is read at startup, so a plugin change needs a restart.

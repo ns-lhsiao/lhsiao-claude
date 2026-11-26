@@ -67,6 +67,22 @@
   conflict/warning. Recoverable via `git checkout HEAD -- .` if nothing was committed yet, but it's
   a destructive footgun; use `git show <ref>:<path>` or a separate worktree to inspect instead.
 
+## Directory-scoped checkout also reverts the new test (2026-11-19)
+- `git checkout <ref> -- <dir>` restores every tracked file under that directory, test files
+  included — so the usual revert-proof check (revert the component, confirm the new test fails,
+  restore) silently removes the very test being proved if the test lives in the same directory as
+  the component.
+- Hit in e1052505: the component and its `__tests__/` sit under
+  `src/pages/dnsProfilesInheritanceGroups/`, and a directory-scoped revert took the new test with
+  it; the note records the fix as "for revert-proof runs revert only the component file, keep the
+  new test".
+- This is a narrower form of the `git checkout <ref> -- .` footgun above, but it is the form you
+  reach for deliberately during verification, and it fails quietly — the run goes green-or-red for
+  the wrong reason instead of erroring.
+- Fix: scope the revert to the single file (`git checkout <ref> -- path/to/Component.tsx`), or keep
+  a copy of the test outside the reverted directory; after restoring, confirm with
+  `git status --short` that the test file is still modified and re-run the suite.
+
 ## mf-client `master` history is release-squash granular — pickaxe + `--is-ancestor` both mislead (2026-09-14)
 - `git log --reverse -S '<marker>' origin/master -- <path>` on **mf-client** returns commits titled
   `Release: 202510.3 (R131) (#655)` / `Release/202603.4 (#990)` — the squash of a whole release branch
@@ -132,3 +148,9 @@
 - A long-lived integration branch (`pr/ENG-1274461/nplan-6460-main`) gets force-rebased: `origin/…` seen at branch time can be stale. Symptom: `[ahead 105, behind 107]`, "skipped previously applied commit". Always `git fetch` immediately before `worktree add` AND before `gh pr create`; fix with `git rebase origin/<base>`, drop stray empty "Retrigger CI" commits via `git rebase --onto origin/<base> <stray> HEAD`, then `git checkout -B <branch> HEAD` (the `--onto … HEAD` form leaves a detached HEAD).
 - zsh: `echo ======` errors `= not found` (`=cmd` expansion) and aborts the rest of a `;` chain. Use `echo -----`.
 - **webui2 clone has a narrow fetch refspec (`+refs/heads/master:refs/remotes/origin/master` only) (2026-11-04).** `git push --set-upstream` from a worktree pushes fine but leaves no tracking; `gh pr create` then aborts "you must first push the current branch to a remote, or use the --head flag", and `git branch --set-upstream-to=origin/<b>` fails ("does not exist" / "is not a branch" even after explicit fetch). Fix: `gh pr create --head <branch>`, and set tracking via `git config branch.<b>.remote origin; git config branch.<b>.merge refs/heads/<b>`.
+
+  - **2026-11-17 (mf-client worktree)**: `yarn install --ignore-scripts` skips husky -> `.husky/_/husky.sh` missing and commit aborts; run `npx husky install` first (never --no-verify). `fix(ENG-NNN):` form also rejected (re-learned; this section already covered it).
+
+- **`~/.claude` `.gitignore` is allowlist (`*`)**: new skill dirs need `git add -f`; follow-up edits to already-tracked files need `git add -u <path>` (plain `git add <dir>` still refuses as ignored).
+
+- **2026-11-26 (mf-client worktree, ENG-1426565)**: the narrow-refspec `gh pr create` trap recurs in mf-client too — `git push -u origin <branch>` succeeds, then `gh pr create` aborts "you must first push the current branch to a remote, or use the --head flag". Retry: `gh pr create --head <branch> --base master`. Separately the `.husky/_/husky.sh` missing trap (noted 2026-11-17) recurred and I wrongly reached for `--no-verify`; correct first move is `npx husky install` in the worktree. For CI-only commits that touch only `.py`/`.yml`/`.md`, lint-staged is a no-op so the impact was nil, but install husky to keep the hook honest.

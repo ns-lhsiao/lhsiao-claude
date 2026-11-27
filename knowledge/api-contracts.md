@@ -20,6 +20,7 @@
 - **QA Test Recommendations field** is `customfield_12503`, accepts ADF doc (not plain text). Discover field IDs with `GET /issue/<KEY>?expand=names`.
 - **Root Cause Analysis field** is `customfield_11701` (ENG project). Schema says `textarea` but **rejects plain string** (`400 Operation value must be an Atlassian Document`) — send ADF `{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":...}]}]}`. Find it via `GET /issue/<KEY>/editmeta` grep `root|cause` in field names.
 - **Fix Description field** is `customfield_12500` (ENG project). Same trap as RCA: editmeta reports `textarea`/`string` but live PUT rejects plain strings — send ADF. Confirmed 2026-11-03 on ENG-1397963 (first PUT 400'd, ADF retry → 204).
+- **PUT `components` alone resets `fixVersions` to `NA`** (ENG project, seen 2026-11-25 on ENG-1244918). A `PUT {"fields":{"components":[...]}}` that omits `fixVersions` does not leave the field untouched — a post-function replaces it with the literal version `NA`. Always send `components` and `fixVersions` in the SAME PUT, then re-`GET` to verify.
 - **CM `security` field** can't be set on create ("not on appropriate screen"). Omit it.
 - **CM `customfield_16792` (Type of Change)** is a cascading select: `{"id":"PARENT","child":{"id":"CHILD"}}`. Software > Feature Flag = `13191` / `28422`.
 - **Atlassian MCP fallback to curl**: tools may not be exposed even when `mcp.json` configures the server. Use `curl -s -u "USER:TOKEN" "https://SITE/rest/api/3/..."`. Env vars: `ATLASSIAN_API_TOKEN`, `ATLASSIAN_USER_EMAIL`, `ATLASSIAN_SITE_URL` (NOT `ATLASSIAN_EMAIL`/`ATLASSIAN_SITE`).
@@ -73,3 +74,17 @@
 - `content += helper(...)` where the helper returns a dict spreads it into `'type'`/`'attrs'`/`'content'` strings — Jira then 400s `INVALID_INPUT` with no detail. Helpers returning ADF nodes must be `append`ed (or return lists).
 - listItem content must be a block (`paragraph`), never a bare `text` node.
 - Bisecting a bad doc by PUT-ing prefixes: success returns **204 with empty body**, not 200 — compare against both.
+
+## Jira v3 textarea custom fields need ADF; priority ids; editmeta (2026-11-17)
+
+- `PUT /rest/api/3/issue/<KEY>` with a plain string for textarea custom field (e.g. `customfield_11701` Root Cause Analysis) → 400 `"Operation value must be an Atlassian Document"`. Wrap as `{version:1,type:"doc",content:[{type:"paragraph",content:[{type:"text",text:...}]}]}` (jq: `split("\n\n") | map(paragraph)`). Priority in same PUT: `{"priority":{"id":"4"}}` (ENG: 1 Blocker, 2 Critical, 3 Major, 4 Minor, 5 Trivial, 6 Service Outage, 10000 Lowest).
+- Check `GET /issue/<KEY>/editmeta` for which fields exist on that issue type: `Escalation` type has no `customfield_12500` (Fix Description) — skip it, put fix suggestion in RCA.
+- jq trap: `.a | {x: .b, y: .c} | map_values(. and {...})` yields booleans via `and`; use `map(select(. != null) | {name, schema})` to inspect field schema.
+
+## mf-client Devices filter: OLD/NEW enum ids COLLIDE (2026-11-27, ENG-1426565)
+- `LAST_EVENT_EVENT_OLD` and `LAST_EVENT_EVENT_NEW` (`src/pages/devices-page/helper/devicesFilterMapping.ts`) are two different numbering schemes for the same events, so the same numeric id means different events on each side: OLD `12`=Tunnel Down due to GRE vs NEW `12`=Disconnected By Uninstall; OLD `14`=Change in network vs NEW `14`=Disconnected Fail Closed; OLD `27`=Upgrade Failure vs NEW `27`=User Disabled By OTP; OLD `28`=Rollback Success vs NEW `28`=OTP Timer Expired Auto Enabled.
+- Consequence: an "OLD map must not contain the new value" assertion is WRONG for most additions — it passes or fails for the wrong reason. Assert OLD **label pairs** (id → label) instead of value absence, and only claim absence when the id is genuinely unused in the OLD enum (e.g. NEW `38`).
+- Same trap applies to the CH-side decision maps: a key listed as "missing" means missing *from the map being edited*, not unused elsewhere in the file.
+
+## `/api/v2/profiles/networks` rejects `values` in `fields` (2026-11-26, ENG-1064313)
+- `fields=id,values` → `400 {"err_code":"60101","message":"invalid format: incorrect fields in query parameters: values is not allowed in fields"}`. Default projection (no `fields`) DOES return `values[]` (+ `values_count`, `description`, …). A fail-open consumer sending `fields=...values` silently never sees addresses — unit tests with HttpTestingController won't catch it. Omit `fields` when you need `values`.

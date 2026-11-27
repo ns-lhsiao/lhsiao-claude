@@ -393,3 +393,8 @@
 - **2026-11-26 (mf-client, ENG-1426565)**: a local end-to-end dry-run that passed was NOT proof — it ran against a worktree branched off an older master, while the deployed workflow ran on current master where an unrelated refactor had emptied a source array. Lesson: before claiming a scanner/parser is green, run it against `origin/master`'s current files (`git fetch` then a fresh worktree off `origin/master`, or fetch the exact files at master's sha), not a stale feature branch base. Add a test that parses the REAL checked-out sources so upstream refactors fail at test time, not only in the scheduled run.
 
 - **2026-11-26 (mf-client ch-mapping-scan)**: adding a new artifact file is a two-place change — the script writes it, but `actions/upload-artifact` `path:` glob must also include it. `path: .../matrix.*` silently excluded a new `summary.md` (run green, artifact just missing the file). When a run adds outputs, download the artifact and `ls` it to confirm; don't trust the green check.
+
+## hub-gm `reconcile` daemon start needs the sandbox OFF (2026-11-27)
+- Sandboxed `python3 scripts/gm.py reconcile` reported `daemon: NOT RUNNING -- PermissionError(1, 'Operation not permitted')` — the daemon could not bind its local port. Not a real daemon failure. Re-run the same `reconcile` with `dangerouslyDisableSandbox: true`; it printed `daemon: running pid=<n>`.
+- Same call also surfaced `sweep error: ... router ... http://127.0.0.1:8788/stats is not reachable`, which cleared once the daemon came up unsandboxed — do not go chasing cc-router until a daemon is actually running.
+- `waiter: listening (pid <n>)` on reconcile means a waiter is already armed: do not arm another, end the turn.

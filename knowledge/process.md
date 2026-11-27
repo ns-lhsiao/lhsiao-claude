@@ -398,3 +398,8 @@
 - Sandboxed `python3 scripts/gm.py reconcile` reported `daemon: NOT RUNNING -- PermissionError(1, 'Operation not permitted')` — the daemon could not bind its local port. Not a real daemon failure. Re-run the same `reconcile` with `dangerouslyDisableSandbox: true`; it printed `daemon: running pid=<n>`.
 - Same call also surfaced `sweep error: ... router ... http://127.0.0.1:8788/stats is not reachable`, which cleared once the daemon came up unsandboxed — do not go chasing cc-router until a daemon is actually running.
 - `waiter: listening (pid <n>)` on reconcile means a waiter is already armed: do not arm another, end the turn.
+
+## hub-gm engine suite: sandboxed run is ~800 red tests; run it UNSANDBOXED (2026-11-27)
+- `git archive HEAD scripts bin openspec SKILL.md | tar -x -C "$d" && cd "$d/scripts" && python3 test_gm.py` inside the sandbox gave `Ran 1136 tests ... FAILED (failures=674, errors=123)`. Not a red tree: every instance-spawning setUp fails with `hub-gm: the router the ccns runner routes through (http://127.0.0.1:8788/stats) is not reachable`. The sandbox blocks the loopback probe; `lsof -nP -iTCP:8788 -sTCP:LISTEN` showed cc-router actually listening. Re-run the suite with `dangerouslyDisableSandbox: true`.
+- `mktemp -d` also fails sandboxed (`mkdtemp failed on /var/folders/...: Operation not permitted`); pass a template under `$TMPDIR` (`mktemp -d "$TMPDIR/hgm-suite-XXXXXX"`) or run unsandboxed.
+- Same class of false alarm as `gm.py reconcile`: a sandboxed reconcile reports `daemon: NOT RUNNING -- PermissionError(1, ...)` and a bogus "router not reachable" sweep error, while the daemon is up. Always re-check a loopback failure unsandboxed before believing it.

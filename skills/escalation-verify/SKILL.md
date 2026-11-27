@@ -18,15 +18,16 @@ user-invocable: true
 **Emit "Skill activated: escalation-verify"**
 
 The escalation hook reads **only the design document** (see
-`escalation_design_check.py`: `.md` design artifacts only, keyword pre-scan, LLM
-judgment against `escalation-risk-checklist.md`). It never opens source code, so
-its GAP verdicts are design-level guesses and its ADDRESSED verdicts are claims
-the code may not honor. This skill closes that loop. It is **read-only**: it
-never edits code or the design.
+`~/.claude/hooks/escalation_design_check.py`: `.md` design artifacts only, keyword
+pre-scan, LLM judgment against `~/.claude/escalation-risk-checklist.md`). It never
+opens source code, so its GAP verdicts are design-level guesses and its ADDRESSED
+verdicts are claims the code may not honor. This skill closes that loop. It is
+**read-only**: it never edits code or the design.
 
 ## Inputs
 
-1. A verdict table: output of the hook / `/escalation-check`, or a report that
+1. A verdict table: output of the hook / `/escalation-check`
+   (`~/.claude/commands/escalation-check.md`), or a report that
    contains one (for example an `all-html/.../escalation-hook-*-scan.html`).
    If none exists, run the checklist pass first (`/escalation-check <design.md>`)
    and use its output.

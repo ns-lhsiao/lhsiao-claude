@@ -6,6 +6,8 @@
 !CLAUDE.md
 !LEARNINGS.md
 !settings.json
+# Escalation-risk checklist (hook's default fallback: hooks/../escalation-risk-checklist.md)
+!escalation-risk-checklist.md
 # mcp.json contains API tokens — do NOT track
 mcp.json
 

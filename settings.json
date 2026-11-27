@@ -95,6 +95,19 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ESCALATION_DESIGN_GLOBS='**/.specs/*/*.md' ESCALATION_MARKER_DIR=\"$HOME/.claude/.escalation-hook\" python3 \"$HOME/.claude/hooks/escalation_design_check.py\"",
+            "timeout": 10,
+            "statusMessage": "Escalation-risk design gate..."
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
